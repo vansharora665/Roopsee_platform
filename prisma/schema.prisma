@@ -1,0 +1,251 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  admin
+  doctor
+  staff
+}
+
+enum ReportStatus {
+  draft_generated
+  under_doctor_review
+  approved
+  sent_to_user
+}
+
+enum IntakeSource {
+  manual
+  supabase
+}
+
+enum PromptInputMode {
+  manual_context
+  scan_assisted
+}
+
+enum PromptSessionStatus {
+  pending
+  imported
+  completed
+}
+
+enum ProductSlot {
+  cleanser
+  sunscreen
+  moisturizer
+  repair_serum
+}
+
+model User {
+  id              String         @id @default(cuid())
+  name            String
+  email           String         @unique
+  role            UserRole
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  reviewedReports DoctorReview[]
+  approvedReports Report[]       @relation("ApprovedBy")
+}
+
+model SyncedProfile {
+  id              String    @id @default(cuid())
+  externalId      String    @unique
+  sourceTable     String?
+  fullName        String?
+  email           String?
+  phone           String?
+  age             Int?
+  sex             String?
+  profileJson     Json
+  quizJson        Json?
+  quizSummaryJson Json?
+  scansJson       Json?
+  scanUrls        Json?
+  profileSummary  String?
+  sourceCreatedAt DateTime?
+  sourceUpdatedAt DateTime?
+  lastSyncedAt    DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  reports         Report[]
+}
+
+model Report {
+  id               String          @id @default(cuid())
+  status           ReportStatus    @default(draft_generated)
+  intakeSource     IntakeSource    @default(manual)
+  promptInputMode  PromptInputMode @default(manual_context)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  approvedAt       DateTime?
+  sentAt           DateTime?
+  approvedByUserId String?
+  approvedBy       User?           @relation("ApprovedBy", fields: [approvedByUserId], references: [id])
+  syncedProfileId  String?
+  syncedProfile    SyncedProfile?  @relation(fields: [syncedProfileId], references: [id])
+  patientInfo      PatientInfo?
+  assets           ReportAssets?
+  analysisOutput   AnalysisOutput?
+  doctorReview     DoctorReview?
+  generatedFile    GeneratedFiles?
+  promptSession    PromptSession?
+  productMatches   ProductMatch[]
+}
+
+model PatientInfo {
+  id           String   @id @default(cuid())
+  reportId     String   @unique
+  report       Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  name         String
+  age          Int
+  sex          String
+  reportDate   DateTime
+  inputSources Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model ReportAssets {
+  id                String   @id @default(cuid())
+  reportId          String   @unique
+  report            Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  image1Url         String?
+  image2Url         String?
+  image3Url         String?
+  questionnaireText String?
+  rawFindingsText   String?
+  visibleIssues     Json?
+  negativeFindings  Json?
+  profileHints      Json?
+  scanContextJson   Json?
+  quizSummaryJson   Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model AnalysisOutput {
+  id                   String   @id @default(cuid())
+  reportId             String   @unique
+  report               Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  skinScore            Int
+  skinScoreLabel       String
+  skinType             String
+  condition            String
+  overallSeverity      String
+  primaryConcerns      Json
+  secondaryConcerns    Json
+  positiveFindings     Json
+  oilLevels            String
+  hydration            String
+  texture              String
+  tone                 String
+  ingredientPlan       Json?
+  routinePlan          Json?
+  productMatchingNotes Json?
+  doctorHandoffJson    Json?
+  rawModelJson         Json
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model DoctorReview {
+  id                     String   @id @default(cuid())
+  reportId               String   @unique
+  report                 Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  cleanserBrand          String?
+  cleanserCompany        String?
+  cleanserProductName    String?
+  sunscreenBrand         String?
+  sunscreenCompany       String?
+  sunscreenProductName   String?
+  moisturizerBrand       String?
+  moisturizerCompany     String?
+  moisturizerProductName String?
+  repairSerumBrand       String?
+  repairSerumCompany     String?
+  repairSerumProductName String?
+  morningRoutine         Json?
+  nightRoutine           Json?
+  doThis                 Json?
+  notThat                Json?
+  expertTips             Json?
+  doctorNotes            String?
+  reviewedByUserId       String?
+  reviewedByUser         User?    @relation(fields: [reviewedByUserId], references: [id])
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+model GeneratedFiles {
+  id               String   @id @default(cuid())
+  reportId         String   @unique
+  report           Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  pdfUrl           String?
+  htmlSnapshotPath String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model PromptSession {
+  id              String              @id @default(cuid())
+  reportId        String              @unique
+  report          Report              @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  status          PromptSessionStatus @default(imported)
+  promptText      String
+  promptContext   Json?
+  responseRawText String?
+  responseJson    Json?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+}
+
+model ProductCatalog {
+  id                          String         @id @default(cuid())
+  sourceRowNumber             Int?
+  brandName                   String
+  productName                 String
+  qty                         String?
+  mrp                         String?
+  category                    String?
+  productType                 String?
+  claimedSkinTypes            Json?
+  claimedSkinConcerns         Json?
+  heroIngredients             Json?
+  heroIngredientStrengths     Json?
+  otherKeyIngredients         Json?
+  potentialIrritants          Json?
+  textureFinish               String?
+  claimedResults              String?
+  dermatTestedClaim           String?
+  suitableForSensitiveSkin    String?
+  ingredientSkinTypeAlignment String?
+  redFlags                    Json?
+  overallSuitabilityScore     Int?
+  researchNotes               String?
+  productUrl                  String?
+  createdAt                   DateTime       @default(now())
+  updatedAt                   DateTime       @updatedAt
+  matches                     ProductMatch[]
+}
+
+model ProductMatch {
+  id               String         @id @default(cuid())
+  reportId         String
+  report           Report         @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  slot             ProductSlot
+  productCatalogId String
+  product          ProductCatalog @relation(fields: [productCatalogId], references: [id], onDelete: Cascade)
+  rank             Int
+  matchScore       Float
+  reasonJson       Json
+  createdAt        DateTime       @default(now())
+
+  @@unique([reportId, slot, rank])
+}

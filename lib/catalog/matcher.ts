@@ -1,0 +1,388 @@
+import type { ProductCatalog } from "@prisma/client";
+
+import { detectSensitivitySignals, summarizeQuizAnswers } from "@/lib/quiz/summary";
+import type { ProductSlotDto } from "@/lib/report/types";
+import type {
+  RecommendedProduct,
+  RecommendedProducts,
+  ReportDraft
+} from "@/lib/validators/draft";
+
+export type ProductCandidate = Pick<
+  ProductCatalog,
+  | "id"
+  | "brandName"
+  | "productName"
+  | "category"
+  | "productType"
+  | "claimedSkinTypes"
+  | "claimedSkinConcerns"
+  | "heroIngredients"
+  | "otherKeyIngredients"
+  | "potentialIrritants"
+  | "textureFinish"
+  | "overallSuitabilityScore"
+  | "productUrl"
+  | "redFlags"
+  | "suitableForSensitiveSkin"
+  | "ingredientSkinTypeAlignment"
+>;
+
+export type RankedProductMatch = {
+  slot: ProductSlotDto;
+  rank: number;
+  matchScore: number;
+  reasonJson: Record<string, unknown>;
+  product: ProductCandidate;
+};
+
+type MatchContext = {
+  patientSkinType: string;
+  quizSummaryJson?: unknown;
+  draft: ReportDraft;
+  catalog: ProductCandidate[];
+};
+
+const slotKeywords: Record<ProductSlotDto, string[]> = {
+  cleanser: ["cleanser", "face wash", "face cleanser"],
+  sunscreen: ["sunscreen", "spf", "sun screen", "sunblock"],
+  moisturizer: ["moisturizer", "cream", "lotion", "gel moisturizer"],
+  repair_serum: ["serum", "repair", "treatment", "active", "corrector"]
+};
+
+function stringArrayFromUnknown(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+}
+
+function tokenize(values: string[]) {
+  return values.map((value) => value.trim().toLowerCase()).filter(Boolean);
+}
+
+function includesToken(haystack: string[], needle: string) {
+  const lowerNeedle = needle.toLowerCase();
+  return haystack.some((item) => item.includes(lowerNeedle) || lowerNeedle.includes(item));
+}
+
+function slotMatchesProduct(slot: ProductSlotDto, product: ProductCandidate) {
+  const haystack = tokenize([
+    product.category ?? "",
+    product.productType ?? "",
+    product.productName,
+    product.brandName
+  ]);
+
+  return slotKeywords[slot].some((keyword) => includesToken(haystack, keyword));
+}
+
+function extractIngredientPool(product: ProductCandidate) {
+  return tokenize([
+    ...stringArrayFromUnknown(product.heroIngredients),
+    ...stringArrayFromUnknown(product.otherKeyIngredients)
+  ]);
+}
+
+function extractConcernPool(product: ProductCandidate) {
+  return tokenize(stringArrayFromUnknown(product.claimedSkinConcerns));
+}
+
+function extractSkinTypePool(product: ProductCandidate) {
+  return tokenize([
+    ...stringArrayFromUnknown(product.claimedSkinTypes),
+    product.ingredientSkinTypeAlignment ?? ""
+  ]);
+}
+
+function extractIrritantPool(product: ProductCandidate) {
+  return tokenize([
+    ...stringArrayFromUnknown(product.potentialIrritants),
+    ...stringArrayFromUnknown(product.redFlags)
+  ]);
+}
+
+export function rankProductsForDraft({ patientSkinType, quizSummaryJson, draft, catalog }: MatchContext) {
+  const concerns = tokenize([
+    ...draft.analysis.key_skin_concerns.primary,
+    ...draft.analysis.key_skin_concerns.secondary,
+    ...draft.product_matching.target_concerns
+  ]);
+  const preferredTextures = tokenize(draft.product_matching.preferred_textures);
+  const avoidIngredients = tokenize(draft.product_matching.avoid_ingredients);
+  const patientSkinTypeTokens = tokenize([patientSkinType]);
+  const sensitivitySignals = detectSensitivitySignals(summarizeQuizAnswers(quizSummaryJson));
+
+  return (Object.keys(slotKeywords) as ProductSlotDto[]).flatMap((slot) => {
+    const desiredSlot = draft.ingredient_plan[slot];
+    const desiredHeroIngredients = tokenize(desiredSlot.hero_ingredients);
+    const desiredSupportingIngredients = tokenize(desiredSlot.supporting_ingredients);
+
+    const ranked = catalog
+      .map((product) => {
+        const ingredientPool = extractIngredientPool(product);
+        const concernPool = extractConcernPool(product);
+        const skinTypePool = extractSkinTypePool(product);
+        const irritantPool = extractIrritantPool(product);
+        const textureText = (product.textureFinish ?? "").toLowerCase();
+        const matchedHeroIngredients = desiredHeroIngredients.filter((ingredient) =>
+          includesToken(ingredientPool, ingredient)
+        );
+        const matchedSupportingIngredients = desiredSupportingIngredients.filter((ingredient) =>
+          includesToken(ingredientPool, ingredient)
+        );
+        const matchedConcerns = concerns.filter((concern) => includesToken(concernPool, concern));
+        const matchedSkinTypes = patientSkinTypeTokens.filter((item) => includesToken(skinTypePool, item));
+        const matchedTextures = preferredTextures.filter((texture) => textureText.includes(texture));
+        const avoidedIngredientHits = avoidIngredients.filter((ingredient) =>
+          includesToken(ingredientPool, ingredient) || includesToken(irritantPool, ingredient)
+        );
+
+        const penalties: string[] = [];
+        let score = 0;
+
+        if (slotMatchesProduct(slot, product)) {
+          score += 36;
+        } else {
+          score -= 10;
+          penalties.push("slot_mismatch");
+        }
+
+        score += matchedHeroIngredients.length * 14;
+        score += matchedSupportingIngredients.length * 6;
+        score += matchedConcerns.length * 6;
+        score += matchedSkinTypes.length * 7;
+        score += matchedTextures.length * 4;
+        score += (product.overallSuitabilityScore ?? 0) * 4;
+
+        if (sensitivitySignals.sensitive) {
+          if ((product.suitableForSensitiveSkin ?? "").toLowerCase().includes("yes")) {
+            score += 6;
+          }
+
+          const sensitivePenalties = irritantPool.filter((item) =>
+            ["fragrance", "essential oil", "perfume", "alcohol", "menthol"].some((flag) =>
+              item.includes(flag)
+            )
+          );
+
+          if (sensitivePenalties.length) {
+            penalties.push(...sensitivePenalties.map((item) => `sensitivity:${item}`));
+            score -= sensitivePenalties.length * 8;
+          }
+        }
+
+        if (sensitivitySignals.pregnant) {
+          const pregnancyFlags = ingredientPool.filter((item) =>
+            ["retinol", "retinoid", "hydroquinone"].some((flag) => item.includes(flag))
+          );
+
+          if (pregnancyFlags.length) {
+            penalties.push(...pregnancyFlags.map((item) => `pregnancy:${item}`));
+            score -= pregnancyFlags.length * 10;
+          }
+        }
+
+        if (avoidedIngredientHits.length) {
+          penalties.push(...avoidedIngredientHits.map((item) => `avoid:${item}`));
+          score -= avoidedIngredientHits.length * 12;
+        }
+
+        return {
+          slot,
+          matchScore: score,
+          product,
+          reasonJson: {
+            desiredPurpose: desiredSlot.purpose,
+            matchedHeroIngredients,
+            matchedSupportingIngredients,
+            matchedConcerns,
+            matchedSkinTypes,
+            matchedTextures,
+            penalties,
+            notes: desiredSlot.notes
+          }
+        };
+      })
+      .sort((left, right) => right.matchScore - left.matchScore)
+      .slice(0, 3)
+      .map((item, index) => ({
+        ...item,
+        rank: index + 1
+      }));
+
+    return ranked;
+  });
+}
+
+function normalizeLookupText(value: string | null | undefined) {
+  return (value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildRecommendationCandidates(recommendation: RecommendedProduct) {
+  if (typeof recommendation !== "string") {
+    return {
+      preferredBrand: recommendation.brand,
+      preferredProductName: recommendation.product_name,
+      rationale: recommendation.rationale,
+      rawLabel: `${recommendation.brand} - ${recommendation.product_name}`,
+      candidateTexts: [
+        `${recommendation.brand} - ${recommendation.product_name}`,
+        `${recommendation.brand} ${recommendation.product_name}`,
+        recommendation.product_name
+      ]
+    };
+  }
+
+  const rawLabel = recommendation.trim();
+  const withoutBracketPrefix = rawLabel.replace(/^\[[^\]]+\]\s*/, "");
+  const beforeMetadata = withoutBracketPrefix.split("|")[0]?.trim() ?? withoutBracketPrefix;
+  const dashParts = beforeMetadata.split(/\s+-\s+/g).map((part) => part.trim()).filter(Boolean);
+  const preferredBrand = dashParts.length > 1 ? dashParts[0] : "";
+  const preferredProductName = dashParts.length > 1 ? dashParts.slice(1).join(" - ") : beforeMetadata;
+
+  return {
+    preferredBrand,
+    preferredProductName,
+    rationale: "",
+    rawLabel,
+    candidateTexts: [rawLabel, withoutBracketPrefix, beforeMetadata, preferredProductName].filter(Boolean)
+  };
+}
+
+function findCatalogProductFromRecommendation(
+  recommendation: RecommendedProduct,
+  catalog: ProductCandidate[]
+) {
+  const lookup = buildRecommendationCandidates(recommendation);
+  const normalizedBrand = normalizeLookupText(lookup.preferredBrand);
+  const normalizedProductName = normalizeLookupText(lookup.preferredProductName);
+  const normalizedCandidates = lookup.candidateTexts.map(normalizeLookupText).filter(Boolean);
+
+  if (normalizedBrand && normalizedProductName) {
+    const exactMatch = catalog.find((product) => {
+      return (
+        normalizeLookupText(product.brandName) === normalizedBrand &&
+        normalizeLookupText(product.productName) === normalizedProductName
+      );
+    });
+
+    if (exactMatch) {
+      return exactMatch;
+    }
+  }
+
+  const combinedMatch = catalog.find((product) => {
+    const combined = normalizeLookupText(`${product.brandName} ${product.productName}`);
+    return normalizedCandidates.some((candidate) => candidate === combined);
+  });
+
+  if (combinedMatch) {
+    return combinedMatch;
+  }
+
+  if (normalizedProductName) {
+    const productNameMatch = catalog.find((product) => {
+      return normalizeLookupText(product.productName) === normalizedProductName;
+    });
+
+    if (productNameMatch) {
+      return productNameMatch;
+    }
+  }
+
+  return (
+    catalog.find((product) => {
+      const combined = normalizeLookupText(`${product.brandName} ${product.productName}`);
+      const productName = normalizeLookupText(product.productName);
+
+      return normalizedCandidates.some((candidate) => {
+        return (
+          combined.includes(candidate) ||
+          candidate.includes(combined) ||
+          productName.includes(candidate) ||
+          candidate.includes(productName)
+        );
+      });
+    }) ?? null
+  );
+}
+
+function buildRecommendationReason(recommendation: RecommendedProduct) {
+  if (typeof recommendation === "string") {
+    return {
+      source: "ai_catalog_selection",
+      selectedText: recommendation
+    };
+  }
+
+  return {
+    source: "ai_catalog_selection",
+    rationale: recommendation.rationale,
+    selectedBrand: recommendation.brand,
+    selectedProductName: recommendation.product_name
+  };
+}
+
+export function resolveAiRecommendedProducts(
+  recommendedProducts: RecommendedProducts | undefined,
+  catalog: ProductCandidate[]
+): RankedProductMatch[] {
+  if (!recommendedProducts) {
+    return [];
+  }
+
+  return (Object.entries(recommendedProducts) as Array<[ProductSlotDto, RecommendedProduct | null]>).flatMap(
+    ([slot, recommendation]) => {
+      if (!recommendation) {
+        return [];
+      }
+
+      const product = findCatalogProductFromRecommendation(recommendation, catalog);
+
+      if (!product) {
+        return [];
+      }
+
+      return [
+        {
+          slot,
+          rank: 1,
+          matchScore: 999,
+          reasonJson: buildRecommendationReason(recommendation),
+          product
+        }
+      ];
+    }
+  );
+}
+
+export function formatProductCatalogForPrompt(catalog: ProductCandidate[]) {
+  if (catalog.length === 0) {
+    return "No catalog is loaded in the platform right now.";
+  }
+
+  return catalog
+    .map((product) => {
+      const parts = [
+        `[${product.productType ?? product.category ?? "Product"}]`,
+        `${product.brandName} - ${product.productName}`,
+        product.claimedSkinTypes ? `Skin types: ${stringArrayFromUnknown(product.claimedSkinTypes).join(", ") || "NR"}` : null,
+        product.claimedSkinConcerns ? `Concerns: ${stringArrayFromUnknown(product.claimedSkinConcerns).join(", ") || "NR"}` : null,
+        product.heroIngredients ? `Hero ingredients: ${stringArrayFromUnknown(product.heroIngredients).join(", ") || "NR"}` : null,
+        product.otherKeyIngredients ? `Other ingredients: ${stringArrayFromUnknown(product.otherKeyIngredients).join(", ") || "NR"}` : null,
+        product.textureFinish ? `Texture: ${product.textureFinish}` : null,
+        product.potentialIrritants ? `Potential irritants: ${stringArrayFromUnknown(product.potentialIrritants).join(", ") || "NR"}` : null,
+        product.overallSuitabilityScore !== null ? `Suitability: ${String(product.overallSuitabilityScore)}/5` : null,
+        product.productUrl ? `Link: ${product.productUrl}` : null
+      ].filter((value): value is string => Boolean(value));
+
+      return `- ${parts.join(" | ")}`;
+    })
+    .join("\n");
+}

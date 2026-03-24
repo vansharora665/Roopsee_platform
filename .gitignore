@@ -1,0 +1,14 @@
+.next
+node_modules
+.env
+.env.local
+dist
+coverage
+*.log
+prisma/dev.db
+public/generated/reports/*.html
+public/generated/reports/*.pdf
+public/uploads/reports/*
+!.gitkeep
+.DS_Store
+tsconfig.tsbuildinfo
