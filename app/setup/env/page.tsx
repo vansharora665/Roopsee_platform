@@ -18,10 +18,10 @@ const exampleEnvLines = [
   '# Supabase settings for your project',
   'NEXT_PUBLIC_SUPABASE_URL="https://YOUR_PROJECT.supabase.co"',
   'SUPABASE_SERVICE_ROLE_KEY="YOUR_SERVICE_ROLE_KEY"',
-  'SUPABASE_PROFILES_TABLE="users"',
-  'SUPABASE_PROFILES_UPDATED_AT_COLUMN="updated_at"',
-  'SUPABASE_SCANS_TABLE="skin_scans"',
-  'SUPABASE_STORAGE_BUCKET="skin-scans"',
+  'SUPABASE_PROFILES_TABLE=&quot;users&quot;',
+  'SUPABASE_PROFILES_UPDATED_AT_COLUMN=&quot;updated_at&quot;',
+  'SUPABASE_SCANS_TABLE=&quot;skin_scans&quot;',
+  'SUPABASE_STORAGE_BUCKET=&quot;skin-scans&quot;',
   '',
   '# Optional helpers',
   'PRODUCT_CATALOG_WORKBOOK_PATH="/Users/vansharora665/Downloads/Final Dr.Monika database.xlsx"',
@@ -104,10 +104,10 @@ export default async function EnvSetupPage() {
           <ul className="list-disc space-y-2 pl-5 text-sm text-slate-700">
             <li><code>NEXT_PUBLIC_SUPABASE_URL</code>: your Supabase project URL.</li>
             <li><code>SUPABASE_SERVICE_ROLE_KEY</code>: server-side service role key from Supabase settings.</li>
-            <li><code>SUPABASE_PROFILES_TABLE="users"</code>: keeps sync pointed at the table from your screenshot.</li>
-            <li><code>SUPABASE_PROFILES_UPDATED_AT_COLUMN="updated_at"</code>: sorts newest rows first.</li>
-            <li><code>SUPABASE_SCANS_TABLE="skin_scans"</code>: pulls the 3 face scans linked to the user.</li>
-            <li><code>SUPABASE_STORAGE_BUCKET="skin-scans"</code>: the public bucket that contains <code>&lt;user-id&gt;/front|left|right</code> scan files.</li>
+            <li><code>SUPABASE_PROFILES_TABLE=&quot;users&quot;</code>: keeps sync pointed at the table from your screenshot.</li>
+            <li><code>SUPABASE_PROFILES_UPDATED_AT_COLUMN=&quot;updated_at&quot;</code>: sorts newest rows first.</li>
+            <li><code>SUPABASE_SCANS_TABLE=&quot;skin_scans&quot;</code>: pulls the 3 face scans linked to the user.</li>
+            <li><code>SUPABASE_STORAGE_BUCKET=&quot;skin-scans&quot;</code>: the public bucket that contains <code>&lt;user-id&gt;/front|left|right</code> scan files.</li>
           </ul>
         </Card>
       </div>

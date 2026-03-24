@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverExternalPackages: ["puppeteer"]
+  experimental: {
+    serverComponentsExternalPackages: ["puppeteer"]
+  }
 };
 
 export default nextConfig;
