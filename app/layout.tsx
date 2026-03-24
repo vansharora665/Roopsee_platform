@@ -4,6 +4,8 @@ import Link from "next/link";
 import "@/app/globals.css";
 import { getCurrentUser } from "@/lib/auth";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Roopsee",
   description: "Dermatologist-style skin analysis report workflow"
