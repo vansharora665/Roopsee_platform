@@ -354,6 +354,99 @@ export const reportTemplateStyles = `
       box-shadow: none;
     }
 
+    .report-page:first-of-type {
+      padding: 20px 18px 18px 18px;
+    }
+
+    .report-page:first-of-type .title {
+      font-size: 30px;
+      margin-bottom: 10px;
+    }
+
+    .report-page:first-of-type .top-grid {
+      gap: 6px 8px;
+      margin-bottom: 14px;
+    }
+
+    .report-page:first-of-type .pill-label {
+      min-width: 82px;
+      padding: 6px 10px;
+      font-size: 11px;
+    }
+
+    .report-page:first-of-type .pill-value {
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+
+    .report-page:first-of-type .images {
+      gap: 14px;
+      margin: 14px 0 10px 0;
+    }
+
+    .report-page:first-of-type .image-slot {
+      width: 160px;
+      height: 160px;
+      border-width: 4px;
+    }
+
+    .report-page:first-of-type .score-wrap {
+      margin: 6px auto 12px auto;
+      padding: 12px 16px 14px 16px;
+    }
+
+    .report-page:first-of-type .score-label {
+      font-size: 16px;
+      margin-bottom: 6px;
+    }
+
+    .report-page:first-of-type .score-point {
+      font-size: 13px;
+    }
+
+    .report-page:first-of-type .score-point span {
+      width: 26px;
+      height: 26px;
+    }
+
+    .report-page:first-of-type .score-bands {
+      font-size: 9px;
+      gap: 6px;
+    }
+
+    .report-page:first-of-type .panel-grid {
+      gap: 12px;
+      margin-top: 8px;
+    }
+
+    .report-page:first-of-type .columns {
+      gap: 10px;
+    }
+
+    .report-page:first-of-type .section-header {
+      padding: 10px 16px;
+      font-size: 16px;
+    }
+
+    .report-page:first-of-type .section-content {
+      padding: 12px 16px 14px 16px;
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .report-page:first-of-type .meta-list li,
+    .report-page:first-of-type .product-item {
+      margin-bottom: 4px;
+    }
+
+    .report-page:first-of-type .product-item {
+      font-size: 14px;
+    }
+
+    .report-page:first-of-type .product-item strong {
+      font-size: 16px;
+    }
+
     .report-page:nth-of-type(2) {
       padding-top: 20px;
       padding-bottom: 108px;
