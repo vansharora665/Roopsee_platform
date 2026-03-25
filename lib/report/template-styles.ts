@@ -348,70 +348,55 @@ export const reportTemplateStyles = `
 
     .report-page {
       width: 210mm;
-      min-height: auto;
+      min-height: 297mm;
       margin: 0;
-      padding: 20px 18px;
       border-radius: 0;
       box-shadow: none;
-      overflow: visible;
       page-break-after: auto;
       break-after: auto;
     }
 
-    .report-page + .report-page {
-      padding-top: 12px;
+    .report-page:nth-of-type(2) {
+      padding-top: 20px;
+      padding-bottom: 108px;
     }
 
-    .title {
+    .report-page:nth-of-type(2) .title {
       margin-bottom: 10px;
       font-size: 30px;
     }
 
-    .panel-grid {
-      gap: 12px;
-    }
-
-    .section-box {
-      overflow: visible;
-      -webkit-box-decoration-break: clone;
-      box-decoration-break: clone;
-    }
-
-    .section-header {
-      padding: 10px 16px;
-      font-size: 16px;
-      -webkit-box-decoration-break: clone;
-      box-decoration-break: clone;
-    }
-
-    .section-content {
-      padding: 12px 16px 14px 16px;
-      font-size: 14px;
-      line-height: 1.35;
-      -webkit-box-decoration-break: clone;
-      box-decoration-break: clone;
-    }
-
-    .routine-grid {
+    .report-page:nth-of-type(2) .routine-grid {
       gap: 14px;
       margin-top: 4px;
     }
 
-    .routine-card {
+    .report-page:nth-of-type(2) .routine-card {
       padding: 14px;
-      break-inside: avoid;
-      page-break-inside: avoid;
     }
 
-    .meta-list li,
-    .routine-list li,
-    .product-item {
+    .report-page:nth-of-type(2) .panel-grid {
+      gap: 12px;
+    }
+
+    .report-page:nth-of-type(2) .section-header {
+      padding: 10px 16px;
+      font-size: 16px;
+    }
+
+    .report-page:nth-of-type(2) .section-content {
+      padding: 12px 16px 14px 16px;
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .report-page:nth-of-type(2) .meta-list li,
+    .report-page:nth-of-type(2) .routine-list li {
       margin-bottom: 4px;
     }
 
-    .footer {
-      position: static;
-      margin-top: 16px;
+    .report-page:nth-of-type(2) .footer {
+      bottom: 18px;
       padding-top: 10px;
       font-size: 12px;
     }
