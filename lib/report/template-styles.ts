@@ -14,14 +14,24 @@ export const reportTemplateStyles = `
     box-sizing: border-box;
   }
 
+  html,
   body {
     margin: 0;
+    padding: 0;
+    width: 794px;
+  }
+
+  body {
     background: linear-gradient(180deg, #fffdf9 0%, #f8f0e6 100%);
     color: var(--ink);
     font-family: "Avenir Next", "Segoe UI", Arial, sans-serif;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 
   .report-root {
+    width: 794px;
+    margin: 0 auto;
     padding: 18px;
   }
 
@@ -317,16 +327,27 @@ export const reportTemplateStyles = `
     color: var(--muted);
   }
 
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
   @media print {
+    html,
     body {
+      width: 794px;
       background: white;
     }
 
     .report-root {
+      width: 794px;
+      margin: 0;
       padding: 0;
     }
 
     .report-page {
+      width: 794px;
+      min-height: 1123px;
       margin: 0;
       border-radius: 0;
       box-shadow: none;
