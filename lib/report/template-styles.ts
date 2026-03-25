@@ -352,8 +352,6 @@ export const reportTemplateStyles = `
       margin: 0;
       border-radius: 0;
       box-shadow: none;
-      page-break-after: auto;
-      break-after: auto;
     }
 
     .report-page:nth-of-type(2) {
