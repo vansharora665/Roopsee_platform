@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { DeleteReportButton } from "@/components/reports/delete-report-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -62,11 +63,14 @@ export function ReportsTable({ reports }: { reports: ReportListItemDto[] }) {
                   <div className="text-slate-500">Created {formatDate(report.createdAt)}</div>
                 </td>
                 <td className="px-5 py-4 align-top">
-                  <Link href={`/reports/${report.id}`}>
-                    <Button variant="secondary" className="whitespace-nowrap">
-                      Open report
-                    </Button>
-                  </Link>
+                  <div className="flex flex-wrap items-start gap-2">
+                    <Link href={`/reports/${report.id}`}>
+                      <Button variant="secondary" className="whitespace-nowrap">
+                        Open report
+                      </Button>
+                    </Link>
+                    <DeleteReportButton reportId={report.id} patientName={report.patientInfo.name} />
+                  </div>
                 </td>
               </tr>
             ))}

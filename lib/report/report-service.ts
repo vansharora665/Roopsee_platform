@@ -1,3 +1,5 @@
+import { rm } from "fs/promises";
+import path from "path";
 import type { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
@@ -11,6 +13,7 @@ import {
 import type { RankedProductMatch } from "@/lib/catalog/matcher";
 import { buildManualPrompt } from "@/lib/report/manual-prompt-builder";
 import { reportInclude, serializeReport, toReportListItem } from "@/lib/report/mappers";
+import { getGeneratedReportsDir, getUploadsReportsDir } from "@/lib/storage/files";
 import type {
   BuildPromptResultDto,
   CreateReportInputDto,
@@ -467,6 +470,80 @@ export async function getReportById(id: string): Promise<ReportDetailDto> {
   return serializeReport(report);
 }
 
+function resolveManagedFilePath(fileUrl: string | null | undefined) {
+  if (!fileUrl?.startsWith("/")) {
+    return null;
+  }
+
+  const managedRoots = [
+    {
+      prefix: "/generated/reports/",
+      dir: getGeneratedReportsDir()
+    },
+    {
+      prefix: "/uploads/reports/",
+      dir: getUploadsReportsDir()
+    }
+  ];
+
+  const match = managedRoots.find((item) => fileUrl.startsWith(item.prefix));
+
+  if (!match) {
+    return null;
+  }
+
+  const relativePath = fileUrl.slice(match.prefix.length);
+
+  if (!relativePath) {
+    return null;
+  }
+
+  return path.join(match.dir, relativePath);
+}
+
+async function cleanupManagedReportFiles(report: {
+  assets?: {
+    image1Url: string | null;
+    image2Url: string | null;
+    image3Url: string | null;
+  } | null;
+  generatedFile?: {
+    pdfUrl: string | null;
+    htmlSnapshotPath: string | null;
+  } | null;
+}) {
+  const filePaths = new Set<string>();
+
+  if (report.generatedFile?.htmlSnapshotPath) {
+    filePaths.add(report.generatedFile.htmlSnapshotPath);
+  }
+
+  const managedUrls = [
+    report.generatedFile?.pdfUrl,
+    report.assets?.image1Url,
+    report.assets?.image2Url,
+    report.assets?.image3Url
+  ];
+
+  for (const fileUrl of managedUrls) {
+    const managedPath = resolveManagedFilePath(fileUrl);
+
+    if (managedPath) {
+      filePaths.add(managedPath);
+    }
+  }
+
+  await Promise.all(
+    Array.from(filePaths).map(async (filePath) => {
+      try {
+        await rm(filePath, { force: true });
+      } catch {
+        // Report deletion should succeed even if local file cleanup does not.
+      }
+    })
+  );
+}
+
 export async function updateDoctorReview(
   reportId: string,
   input: DoctorReviewInputDto
@@ -505,6 +582,47 @@ export async function updateReportStatus(reportId: string, status: ReportStatusD
   });
 
   return serializeReport(report);
+}
+
+export async function deleteReport(reportId: string) {
+  const report = await prisma.report.findUnique({
+    where: {
+      id: reportId
+    },
+    select: {
+      id: true,
+      assets: {
+        select: {
+          image1Url: true,
+          image2Url: true,
+          image3Url: true
+        }
+      },
+      generatedFile: {
+        select: {
+          pdfUrl: true,
+          htmlSnapshotPath: true
+        }
+      }
+    }
+  });
+
+  if (!report) {
+    throw new Error("Report not found");
+  }
+
+  await prisma.report.delete({
+    where: {
+      id: reportId
+    }
+  });
+
+  await cleanupManagedReportFiles(report);
+
+  return {
+    id: reportId,
+    deleted: true
+  };
 }
 
 export async function approveReport(reportId: string) {
