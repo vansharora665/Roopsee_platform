@@ -355,96 +355,97 @@ export const reportTemplateStyles = `
     }
 
     .report-page:first-of-type {
-      padding: 20px 18px 18px 18px;
+      padding: 16px 14px 14px 14px;
     }
 
     .report-page:first-of-type .title {
-      font-size: 30px;
-      margin-bottom: 10px;
+      font-size: 27px;
+      margin-bottom: 8px;
     }
 
     .report-page:first-of-type .top-grid {
-      gap: 6px 8px;
-      margin-bottom: 14px;
+      gap: 5px 6px;
+      margin-bottom: 10px;
     }
 
     .report-page:first-of-type .pill-label {
-      min-width: 82px;
-      padding: 6px 10px;
-      font-size: 11px;
+      min-width: 74px;
+      padding: 5px 8px;
+      font-size: 10px;
     }
 
     .report-page:first-of-type .pill-value {
-      padding: 6px 10px;
-      font-size: 12px;
+      padding: 5px 8px;
+      font-size: 11px;
     }
 
     .report-page:first-of-type .images {
-      gap: 14px;
-      margin: 14px 0 10px 0;
+      gap: 10px;
+      margin: 10px 0 8px 0;
     }
 
     .report-page:first-of-type .image-slot {
-      width: 160px;
-      height: 160px;
+      width: 150px;
+      height: 150px;
       border-width: 4px;
     }
 
     .report-page:first-of-type .score-wrap {
-      margin: 6px auto 12px auto;
-      padding: 12px 16px 14px 16px;
+      margin: 4px auto 10px auto;
+      padding: 10px 14px 12px 14px;
     }
 
     .report-page:first-of-type .score-label {
-      font-size: 16px;
-      margin-bottom: 6px;
+      font-size: 14px;
+      margin-bottom: 4px;
     }
 
     .report-page:first-of-type .score-point {
-      font-size: 13px;
+      font-size: 12px;
     }
 
     .report-page:first-of-type .score-point span {
-      width: 26px;
-      height: 26px;
+      width: 24px;
+      height: 24px;
     }
 
     .report-page:first-of-type .score-bands {
-      font-size: 9px;
-      gap: 6px;
+      font-size: 8px;
+      gap: 4px;
     }
 
     .report-page:first-of-type .panel-grid {
-      gap: 12px;
-      margin-top: 8px;
+      gap: 10px;
+      margin-top: 6px;
     }
 
     .report-page:first-of-type .columns {
-      gap: 10px;
+      gap: 8px;
     }
 
     .report-page:first-of-type .section-header {
-      padding: 10px 16px;
-      font-size: 16px;
+      padding: 8px 14px;
+      font-size: 14px;
     }
 
     .report-page:first-of-type .section-content {
-      padding: 12px 16px 14px 16px;
-      font-size: 14px;
-      line-height: 1.35;
+      padding: 10px 14px 12px 14px;
+      font-size: 12.5px;
+      line-height: 1.25;
     }
 
     .report-page:first-of-type .meta-list li,
     .report-page:first-of-type .product-item {
-      margin-bottom: 4px;
+      margin-bottom: 2px;
     }
 
     .report-page:first-of-type .product-item {
-      font-size: 14px;
+      font-size: 12.5px;
+      line-height: 1.2;
     }
 
     .report-page:first-of-type .product-item strong {
-      font-size: 16px;
+      font-size: 14px;
     }
 
     .report-page:nth-of-type(2) {
