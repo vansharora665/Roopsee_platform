@@ -23,9 +23,11 @@ export async function generateReportPdf(report: ReportDetailDto) {
   await writeFile(htmlPath, html, "utf8");
 
   const puppeteer = await import("puppeteer");
+  const chromiumArgs = process.getuid?.() === 0 ? ["--no-sandbox", "--disable-setuid-sandbox"] : [];
   const browser = await puppeteer.default.launch({
     headless: true,
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+    args: chromiumArgs
   });
 
   try {
