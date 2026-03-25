@@ -18,7 +18,6 @@ export const reportTemplateStyles = `
   body {
     margin: 0;
     padding: 0;
-    width: 794px;
   }
 
   body {
@@ -30,7 +29,8 @@ export const reportTemplateStyles = `
   }
 
   .report-root {
-    width: 794px;
+    width: fit-content;
+    max-width: 100%;
     margin: 0 auto;
     padding: 18px;
   }
@@ -38,7 +38,7 @@ export const reportTemplateStyles = `
   .report-page {
     position: relative;
     width: 794px;
-    min-height: 1123px;
+    min-height: 1122px;
     margin: 0 auto 16px auto;
     padding: 24px 22px;
     background: white;
@@ -347,7 +347,7 @@ export const reportTemplateStyles = `
 
     .report-page {
       width: 794px;
-      min-height: 1123px;
+      min-height: 1122px;
       margin: 0;
       border-radius: 0;
       box-shadow: none;

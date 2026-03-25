@@ -34,15 +34,16 @@ export async function generateReportPdf(report: ReportDetailDto) {
     const page = await browser.newPage();
     await page.setViewport({
       width: 794,
-      height: 1123,
+      height: 1122,
       deviceScaleFactor: 1
     });
     await page.setContent(html, { waitUntil: "networkidle0" });
     await page.emulateMediaType("print");
     await page.pdf({
       path: pdfPath,
+      width: "210mm",
+      height: "297mm",
       printBackground: true,
-      preferCSSPageSize: true,
       scale: 1,
       margin: {
         top: "0",
