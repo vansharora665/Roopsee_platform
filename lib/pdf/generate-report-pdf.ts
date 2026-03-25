@@ -44,7 +44,7 @@ export async function generateReportPdf(report: ReportDetailDto) {
       width: "210mm",
       height: "297mm",
       printBackground: true,
-      scale: 0.98,
+      scale: 0.97,
       margin: {
         top: "0",
         right: "0",

@@ -348,55 +348,70 @@ export const reportTemplateStyles = `
 
     .report-page {
       width: 210mm;
-      min-height: 297mm;
+      min-height: auto;
       margin: 0;
+      padding: 20px 18px;
       border-radius: 0;
       box-shadow: none;
+      overflow: visible;
       page-break-after: auto;
       break-after: auto;
     }
 
-    .report-page:nth-of-type(2) {
-      padding-top: 20px;
-      padding-bottom: 108px;
+    .report-page + .report-page {
+      padding-top: 12px;
     }
 
-    .report-page:nth-of-type(2) .title {
+    .title {
       margin-bottom: 10px;
       font-size: 30px;
     }
 
-    .report-page:nth-of-type(2) .routine-grid {
+    .panel-grid {
+      gap: 12px;
+    }
+
+    .section-box {
+      overflow: visible;
+      -webkit-box-decoration-break: clone;
+      box-decoration-break: clone;
+    }
+
+    .section-header {
+      padding: 10px 16px;
+      font-size: 16px;
+      -webkit-box-decoration-break: clone;
+      box-decoration-break: clone;
+    }
+
+    .section-content {
+      padding: 12px 16px 14px 16px;
+      font-size: 14px;
+      line-height: 1.35;
+      -webkit-box-decoration-break: clone;
+      box-decoration-break: clone;
+    }
+
+    .routine-grid {
       gap: 14px;
       margin-top: 4px;
     }
 
-    .report-page:nth-of-type(2) .routine-card {
+    .routine-card {
       padding: 14px;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
 
-    .report-page:nth-of-type(2) .panel-grid {
-      gap: 12px;
-    }
-
-    .report-page:nth-of-type(2) .section-header {
-      padding: 10px 16px;
-      font-size: 16px;
-    }
-
-    .report-page:nth-of-type(2) .section-content {
-      padding: 12px 16px 14px 16px;
-      font-size: 14px;
-      line-height: 1.35;
-    }
-
-    .report-page:nth-of-type(2) .meta-list li,
-    .report-page:nth-of-type(2) .routine-list li {
+    .meta-list li,
+    .routine-list li,
+    .product-item {
       margin-bottom: 4px;
     }
 
-    .report-page:nth-of-type(2) .footer {
-      bottom: 18px;
+    .footer {
+      position: static;
+      margin-top: 16px;
       padding-top: 10px;
       font-size: 12px;
     }
