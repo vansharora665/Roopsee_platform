@@ -4,7 +4,7 @@ Roopsee is a production-oriented MVP for dermatologist-style skin analysis repor
 
 ## Final workflow in this version
 
-1. User data, quiz answers, and scan references are stored in Supabase.
+1. User data, quiz answers, and scan references are stored in the single Supabase table `master_user_quiz`.
 2. The platform can sync those profiles into its own `SyncedProfile` table either by manual pull or by a webhook.
 3. A staff member opens `/reports/new`, selects a Supabase profile or enters data manually, and generates a fixed ChatGPT prompt on-platform.
 4. The operator pastes the ChatGPT JSON draft back into the platform.
@@ -66,12 +66,8 @@ Required for Supabase integration:
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
-
-Optional Supabase tuning:
-
-- `SUPABASE_PROFILES_TABLE` default `profiles`
+- `SUPABASE_PROFILES_TABLE` default `master_user_quiz`
 - `SUPABASE_PROFILES_UPDATED_AT_COLUMN` default `updated_at`
-- `SUPABASE_QUIZ_RESULTS_TABLE` and `SUPABASE_QUIZ_RESULTS_LINK_COLUMN` for pulling gender, quiz answers, and image URLs from `quiz_results`
 - `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` for draft/approval bot notifications
 
 Optional product import helper:
@@ -112,10 +108,8 @@ Use a provider that runs a long-lived Node container and supports a persistent d
        DATABASE_URL=<Railway Postgres connection string>
        NEXT_PUBLIC_SUPABASE_URL=<your Supabase URL>
        SUPABASE_SERVICE_ROLE_KEY=<your Supabase service role key>
-       SUPABASE_PROFILES_TABLE=users
+       SUPABASE_PROFILES_TABLE=master_user_quiz
        SUPABASE_PROFILES_UPDATED_AT_COLUMN=updated_at
-       SUPABASE_QUIZ_RESULTS_TABLE=quiz_results
-       SUPABASE_QUIZ_RESULTS_LINK_COLUMN=user_id
        TELEGRAM_BOT_TOKEN=your_bot_token
        TELEGRAM_CHAT_ID=your_chat_id
        APP_URL=<your Railway public URL>
@@ -175,15 +169,24 @@ The route accepts either a raw row payload or the common Supabase `record` / `ne
 
 ### Expected profile data shape
 
-The normalizer is defensive because your exact schema can vary. It looks for common fields such as:
+This version now reads directly from `master_user_quiz` as the single source of truth. The app expects these columns on that row:
 
-- `name`, `full_name`, `patient_name`
+- `id`
+- `name`
+- `email`
+- `phone_no`
 - `age`
-- `sex`, `gender`
-- `quiz_answers`, `quiz_json`, `questionnaire_json`, `skin_quiz`
-- `scans`, `scan_urls`, `images`, `image_urls`, `photos`
+- `gender`
+- `skin_type`
+- `skin_concerns`
+- `answers`
+- `image_url`
+- `image_url_left`
+- `image_url_right`
+- `created_at`
+- `updated_at`
 
-If your schema uses different names, update `lib/supabase/profile-normalizer.ts`.
+If your schema changes, update `lib/supabase/profile-normalizer.ts`.
 
 ## Prompt and draft workflow
 

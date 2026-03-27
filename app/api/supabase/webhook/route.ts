@@ -14,10 +14,6 @@ function readString(value: unknown) {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function looksLikeQuizResultsRow(row: Record<string, unknown>) {
-  return ["answers", "image_url", "image_url_left", "image_url_right", "gender"].some((key) => key in row);
-}
-
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as {
@@ -29,36 +25,23 @@ export async function POST(request: Request) {
     const row = body.record ?? body.new ?? body;
 
     if (!row || typeof row !== "object" || Array.isArray(row)) {
-      throw new Error("Webhook payload must contain a profile record");
+      throw new Error("Webhook payload must contain a master_user_quiz row");
     }
 
     const record = row as Record<string, unknown>;
-    const table = readString(body.table);
-    const profileId = readString(record.user_id) ?? readString(record.profile_id) ?? readString(record.id);
+    const profileId = readString(record.id);
     const email = readString(record.email);
-
-    if (table === "quiz_results" || looksLikeQuizResultsRow(record)) {
-      if (profileId) {
-        const syncedProfile = await syncSupabaseProfileByExternalId(profileId);
-
-        if (syncedProfile) {
-          return apiResponse(syncedProfile);
-        }
-      }
-
-      if (email) {
-        const syncedProfile = await syncSupabaseProfileByEmail(email);
-
-        if (syncedProfile) {
-          return apiResponse(syncedProfile);
-        }
-      }
-
-      throw new Error("quiz_results webhook payload must include a user link that matches the users table");
-    }
 
     if (profileId) {
       const syncedProfile = await syncSupabaseProfileByExternalId(profileId);
+
+      if (syncedProfile) {
+        return apiResponse(syncedProfile);
+      }
+    }
+
+    if (email) {
+      const syncedProfile = await syncSupabaseProfileByEmail(email);
 
       if (syncedProfile) {
         return apiResponse(syncedProfile);

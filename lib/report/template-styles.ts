@@ -76,11 +76,11 @@ export const reportTemplateStyles = `
 
   .verified-stamp {
     position: relative;
-    width: 138px;
-    height: 138px;
+    width: 168px;
+    height: 168px;
     border-radius: 999px;
     border: 3px solid rgba(45, 123, 71, 0.92);
-    background: radial-gradient(circle at 50% 45%, rgba(255,255,255,0.99) 0%, rgba(232, 247, 236, 0.95) 58%, rgba(194, 231, 202, 0.98) 100%);
+    background: radial-gradient(circle at 50% 45%, rgba(255,255,255,0.18) 0%, rgba(232, 247, 236, 0.16) 58%, rgba(194, 231, 202, 0.22) 100%); backdrop-filter: blur(1px);
     color: #1f6c3f;
     display: flex;
     flex-direction: column;
@@ -112,7 +112,7 @@ export const reportTemplateStyles = `
   }
 
   .verified-stamp-title {
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 900;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -120,17 +120,17 @@ export const reportTemplateStyles = `
 
   .verified-stamp-subtitle,
   .verified-stamp-date {
-    font-size: 10px;
+    font-size: 11px;
     line-height: 1.34;
     font-weight: 800;
-    max-width: 88px;
+    max-width: 104px;
   }
 
   .bottom-approval-row {
     position: absolute;
     left: 24px;
     right: 24px;
-    bottom: 92px;
+    bottom: 82px;
     display: flex;
     justify-content: flex-end;
     pointer-events: none;
@@ -447,18 +447,18 @@ export const reportTemplateStyles = `
     }
 
     .report-page:nth-of-type(2) .verified-stamp {
-      width: 110px;
-      height: 110px;
+      width: 136px;
+      height: 136px;
       padding: 10px;
     }
 
     .report-page:nth-of-type(2) .verified-stamp-title {
-      font-size: 10px;
+      font-size: 11px;
     }
 
     .report-page:nth-of-type(2) .verified-stamp-subtitle,
     .report-page:nth-of-type(2) .verified-stamp-date {
-      font-size: 8.6px;
+      font-size: 9.4px;
     }
 
     .report-page:first-of-type .top-grid {
