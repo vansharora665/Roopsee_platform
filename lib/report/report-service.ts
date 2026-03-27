@@ -216,7 +216,6 @@ async function syncApprovedProductsToSupabase(report: ReportDetailDto) {
 
   await updateSupabaseUserProducts({
     externalId: report.syncedProfile.externalId,
-    sourceTable: report.syncedProfile.sourceTable,
     products: buildApprovedProductsPayload(report)
   });
 }

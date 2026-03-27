@@ -255,11 +255,10 @@ export function extractStoredScanUrls(
 
 export async function updateSupabaseUserProducts(args: {
   externalId: string;
-  sourceTable?: string | null;
   products: ApprovedProductExport[];
 }) {
   const supabase = getSupabaseAdminClient();
-  const table = args.sourceTable?.trim() || getProfilesTableName();
+  const table = getProfilesTableName();
 
   const { error } = await supabase
     .from(table)
