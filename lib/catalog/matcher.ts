@@ -44,10 +44,16 @@ type MatchContext = {
 };
 
 const slotKeywords: Record<ProductSlotDto, string[]> = {
-  cleanser: ["cleanser", "face wash", "face cleanser"],
+  cleanser: ["cleanser", "face wash", "facewash", "face cleanser", "gel cleanser", "foaming cleanser"],
   sunscreen: ["sunscreen", "spf", "sun screen", "sunblock"],
   moisturizer: ["moisturizer", "cream", "lotion", "gel moisturizer"],
   repair_serum: ["serum", "repair", "treatment", "active", "corrector"]
+};
+
+type CleanserPreference = {
+  preferredKeywords: string[];
+  discouragedKeywords: string[];
+  label: string;
 };
 
 function stringArrayFromUnknown(value: unknown) {
@@ -76,6 +82,58 @@ function slotMatchesProduct(slot: ProductSlotDto, product: ProductCandidate) {
   ]);
 
   return slotKeywords[slot].some((keyword) => includesToken(haystack, keyword));
+}
+
+function getProductTextPool(product: ProductCandidate) {
+  return tokenize([
+    product.category ?? "",
+    product.productType ?? "",
+    product.productName,
+    product.brandName,
+    product.textureFinish ?? ""
+  ]);
+}
+
+function getCleanserPreference(args: {
+  patientSkinType: string;
+  concerns: string[];
+  quizSummaryJson?: unknown;
+  oilLevels: string;
+  hydration: string;
+}) : CleanserPreference {
+  const quizTokens = tokenize(summarizeQuizAnswers(args.quizSummaryJson));
+  const signalPool = tokenize([
+    args.patientSkinType,
+    ...args.concerns,
+    args.oilLevels,
+    args.hydration,
+    ...quizTokens
+  ]);
+
+  const oilySignals = ["oily", "acne", "breakout", "comedone", "high", "combination"];
+  const gentleSignals = ["dry", "dehydrated", "sensitive", "redness", "low", "barrier"];
+
+  if (oilySignals.some((signal) => includesToken(signalPool, signal))) {
+    return {
+      preferredKeywords: ["face wash", "facewash", "foaming", "foam", "gel cleanser", "gel"],
+      discouragedKeywords: ["cleansing balm", "milk cleanser", "cream cleanser"],
+      label: "clarifying_facewash"
+    };
+  }
+
+  if (gentleSignals.some((signal) => includesToken(signalPool, signal))) {
+    return {
+      preferredKeywords: ["cleanser", "gentle", "cream cleanser", "hydrating", "lotion cleanser"],
+      discouragedKeywords: ["foaming", "face wash", "scrub"],
+      label: "gentle_cleanser"
+    };
+  }
+
+  return {
+    preferredKeywords: ["cleanser", "face wash", "facewash"],
+    discouragedKeywords: [],
+    label: "balanced_cleanser"
+  };
 }
 
 function extractIngredientPool(product: ProductCandidate) {
@@ -118,6 +176,15 @@ export function rankProductsForDraft({ patientSkinType, quizSummaryJson, draft, 
     const desiredSlot = draft.ingredient_plan[slot];
     const desiredHeroIngredients = tokenize(desiredSlot.hero_ingredients);
     const desiredSupportingIngredients = tokenize(desiredSlot.supporting_ingredients);
+    const cleanserPreference = slot === "cleanser"
+      ? getCleanserPreference({
+          patientSkinType,
+          concerns,
+          quizSummaryJson,
+          oilLevels: draft.analysis.primary_observations.oil_levels,
+          hydration: draft.analysis.primary_observations.hydration
+        })
+      : null;
 
     const ranked = catalog
       .map((product) => {
@@ -125,6 +192,7 @@ export function rankProductsForDraft({ patientSkinType, quizSummaryJson, draft, 
         const concernPool = extractConcernPool(product);
         const skinTypePool = extractSkinTypePool(product);
         const irritantPool = extractIrritantPool(product);
+        const productTextPool = getProductTextPool(product);
         const textureText = (product.textureFinish ?? "").toLowerCase();
         const matchedHeroIngredients = desiredHeroIngredients.filter((ingredient) =>
           includesToken(ingredientPool, ingredient)
@@ -135,6 +203,12 @@ export function rankProductsForDraft({ patientSkinType, quizSummaryJson, draft, 
         const matchedConcerns = concerns.filter((concern) => includesToken(concernPool, concern));
         const matchedSkinTypes = patientSkinTypeTokens.filter((item) => includesToken(skinTypePool, item));
         const matchedTextures = preferredTextures.filter((texture) => textureText.includes(texture));
+        const matchedCleanserFormat = cleanserPreference
+          ? cleanserPreference.preferredKeywords.filter((keyword) => includesToken(productTextPool, keyword))
+          : [];
+        const discouragedCleanserFormat = cleanserPreference
+          ? cleanserPreference.discouragedKeywords.filter((keyword) => includesToken(productTextPool, keyword))
+          : [];
         const avoidedIngredientHits = avoidIngredients.filter((ingredient) =>
           includesToken(ingredientPool, ingredient) || includesToken(irritantPool, ingredient)
         );
@@ -155,6 +229,18 @@ export function rankProductsForDraft({ patientSkinType, quizSummaryJson, draft, 
         score += matchedSkinTypes.length * 7;
         score += matchedTextures.length * 4;
         score += (product.overallSuitabilityScore ?? 0) * 4;
+
+        if (cleanserPreference) {
+          score += matchedCleanserFormat.length * 8;
+          if (matchedCleanserFormat.length === 0) {
+            score -= 3;
+          }
+
+          if (discouragedCleanserFormat.length > 0) {
+            penalties.push(...discouragedCleanserFormat.map((item) => `cleanser_format:${item}`));
+            score -= discouragedCleanserFormat.length * 8;
+          }
+        }
 
         if (sensitivitySignals.sensitive) {
           if ((product.suitableForSensitiveSkin ?? "").toLowerCase().includes("yes")) {
@@ -201,7 +287,10 @@ export function rankProductsForDraft({ patientSkinType, quizSummaryJson, draft, 
             matchedSkinTypes,
             matchedTextures,
             penalties,
-            notes: desiredSlot.notes
+            notes: desiredSlot.notes,
+            cleanserPreference: cleanserPreference?.label,
+            matchedCleanserFormat,
+            discouragedCleanserFormat
           }
         };
       })

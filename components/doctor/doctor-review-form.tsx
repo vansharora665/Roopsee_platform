@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { DEFAULT_USAGE_AMOUNTS, DO_THIS_OPTIONS, NOT_THAT_OPTIONS } from "@/lib/report/default-guidance";
+import { getSkinScoreLabel, normalizeSkinScore } from "@/lib/report/score";
 import type { ProductMatchDto, ReportDetailDto } from "@/lib/report/types";
 
 type RoutineItem = {
@@ -30,6 +31,17 @@ type DoctorReviewFormValues = {
   repairSerumBrand: string;
   repairSerumCompany: string;
   repairSerumProductName: string;
+  analysisSkinScore: string;
+  analysisSkinType: string;
+  analysisCondition: string;
+  analysisOverallSeverity: "None" | "Mild" | "Moderate" | "Severe";
+  analysisPrimaryConcernsText: string;
+  analysisSecondaryConcernsText: string;
+  analysisPositiveFindingsText: string;
+  analysisOilLevels: "Low" | "Medium" | "High";
+  analysisHydration: "Low" | "Good";
+  analysisTexture: "Smooth" | "Uneven";
+  analysisTone: "Even" | "Uneven";
   morningRoutine: RoutineItem[];
   nightRoutine: RoutineItem[];
   doThisSelections: string[];
@@ -37,11 +49,17 @@ type DoctorReviewFormValues = {
   doctorNotes: string;
 };
 
+const overallSeverityOptions = ["None", "Mild", "Moderate", "Severe"] as const;
+const oilLevelOptions = ["Low", "Medium", "High"] as const;
+const hydrationOptions = ["Low", "Good"] as const;
+const textureOptions = ["Smooth", "Uneven"] as const;
+const toneOptions = ["Even", "Uneven"] as const;
+
 const productFields = [
   {
     slot: "cleanser",
     prefix: "cleanser",
-    title: "Cleanser",
+    title: "Cleanser / Facewash",
     brand: "cleanserBrand",
     company: "cleanserCompany",
     productName: "cleanserProductName"
@@ -166,6 +184,17 @@ function matchesSuggestion(
   );
 }
 
+function multilineToArray(value: string) {
+  return value
+    .split(/\n+/g)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function arrayToMultiline(values: string[]) {
+  return values.join("\n");
+}
+
 export function DoctorReviewForm({ report }: { report: ReportDetailDto }) {
   const router = useRouter();
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -186,6 +215,17 @@ export function DoctorReviewForm({ report }: { report: ReportDetailDto }) {
       repairSerumBrand: report.doctorReview.repairSerumBrand ?? "",
       repairSerumCompany: report.doctorReview.repairSerumCompany ?? "",
       repairSerumProductName: report.doctorReview.repairSerumProductName ?? "",
+      analysisSkinScore: String(report.analysisOutput.skinScore),
+      analysisSkinType: report.analysisOutput.skinType,
+      analysisCondition: report.analysisOutput.condition,
+      analysisOverallSeverity: report.analysisOutput.overallSeverity as DoctorReviewFormValues["analysisOverallSeverity"],
+      analysisPrimaryConcernsText: arrayToMultiline(report.analysisOutput.primaryConcerns),
+      analysisSecondaryConcernsText: arrayToMultiline(report.analysisOutput.secondaryConcerns),
+      analysisPositiveFindingsText: arrayToMultiline(report.analysisOutput.positiveFindings),
+      analysisOilLevels: report.analysisOutput.oilLevels as DoctorReviewFormValues["analysisOilLevels"],
+      analysisHydration: report.analysisOutput.hydration as DoctorReviewFormValues["analysisHydration"],
+      analysisTexture: report.analysisOutput.texture as DoctorReviewFormValues["analysisTexture"],
+      analysisTone: report.analysisOutput.tone as DoctorReviewFormValues["analysisTone"],
       morningRoutine: report.doctorReview.morningRoutine.length
         ? report.doctorReview.morningRoutine
         : [{ step: "", usageAmount: "" }],
@@ -203,6 +243,7 @@ export function DoctorReviewForm({ report }: { report: ReportDetailDto }) {
 
   const doThisSelections = form.watch("doThisSelections");
   const notThatSelections = form.watch("notThatSelections");
+  const liveSkinScore = form.watch("analysisSkinScore");
 
   const quantityGuidance = useMemo(
     () => [
@@ -214,6 +255,15 @@ export function DoctorReviewForm({ report }: { report: ReportDetailDto }) {
     ],
     []
   );
+
+  const scorePreview = useMemo(() => {
+    const parsed = Number.parseFloat(liveSkinScore);
+    if (!Number.isFinite(parsed)) {
+      return report.analysisOutput.skinScoreLabel;
+    }
+
+    return getSkinScoreLabel(normalizeSkinScore(parsed));
+  }, [liveSkinScore, report.analysisOutput.skinScoreLabel]);
 
   const suggestionsBySlot = useMemo(() => {
     return productFields.reduce<Record<string, ProductMatchDto[]>>((accumulator, field) => {
@@ -276,7 +326,20 @@ export function DoctorReviewForm({ report }: { report: ReportDetailDto }) {
       doThis: Array.from(new Set(values.doThisSelections.map((item) => item.trim()).filter(Boolean))),
       notThat: Array.from(new Set(values.notThatSelections.map((item) => item.trim()).filter(Boolean))),
       expertTips: [],
-      doctorNotes: values.doctorNotes.trim() || null
+      doctorNotes: values.doctorNotes.trim() || null,
+      analysisOverride: {
+        skinScore: Number.parseFloat(values.analysisSkinScore),
+        skinType: values.analysisSkinType.trim(),
+        condition: values.analysisCondition.trim(),
+        overallSeverity: values.analysisOverallSeverity,
+        primaryConcerns: multilineToArray(values.analysisPrimaryConcernsText),
+        secondaryConcerns: multilineToArray(values.analysisSecondaryConcernsText),
+        positiveFindings: multilineToArray(values.analysisPositiveFindingsText),
+        oilLevels: values.analysisOilLevels,
+        hydration: values.analysisHydration,
+        texture: values.analysisTexture,
+        tone: values.analysisTone
+      }
     };
   }
 
@@ -346,8 +409,7 @@ export function DoctorReviewForm({ report }: { report: ReportDetailDto }) {
           </p>
           <h2 className="text-2xl font-semibold text-slate-900">Editable review fields</h2>
           <p className="mt-2 max-w-3xl text-sm text-slate-600">
-            GPT-generated analysis stays read-only here. Product choices, routines, preset guidance,
-            and delivery actions are finalized separately by the doctor.
+            The doctor can now adjust the generated analysis, product selection, routines, and guidance before approval.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -506,6 +568,86 @@ export function DoctorReviewForm({ report }: { report: ReportDetailDto }) {
       </div>
 
       <form className="space-y-8" onSubmit={(event) => event.preventDefault()}>
+        <Card className="space-y-5 border border-slate-200 shadow-none">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900">Doctor-adjustable analysis</h3>
+              <p className="text-sm text-slate-600">
+                These fields control the generated analysis shown in the final report.
+              </p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
+              Score label preview: <span className="font-semibold text-slate-900">{scorePreview}</span>
+            </div>
+          </div>
+          <div className="grid gap-4 xl:grid-cols-2">
+            <label className="space-y-2 text-sm font-medium text-slate-700">
+              Skin score
+              <Input type="number" step="0.1" min="0" max="10" {...form.register("analysisSkinScore")} />
+            </label>
+            <label className="space-y-2 text-sm font-medium text-slate-700">
+              Overall severity
+              <select {...form.register("analysisOverallSeverity")} className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900">
+                {overallSeverityOptions.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-2 text-sm font-medium text-slate-700">
+              Skin type
+              <Input {...form.register("analysisSkinType")} />
+            </label>
+            <label className="space-y-2 text-sm font-medium text-slate-700">
+              Condition
+              <Input {...form.register("analysisCondition")} />
+            </label>
+            <label className="space-y-2 text-sm font-medium text-slate-700">
+              Oil levels
+              <select {...form.register("analysisOilLevels")} className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900">
+                {oilLevelOptions.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-2 text-sm font-medium text-slate-700">
+              Hydration
+              <select {...form.register("analysisHydration")} className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900">
+                {hydrationOptions.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-2 text-sm font-medium text-slate-700">
+              Texture
+              <select {...form.register("analysisTexture")} className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900">
+                {textureOptions.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-2 text-sm font-medium text-slate-700">
+              Tone
+              <select {...form.register("analysisTone")} className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900">
+                {toneOptions.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-2 text-sm font-medium text-slate-700 xl:col-span-2">
+              Primary concerns
+              <Textarea {...form.register("analysisPrimaryConcernsText")} className="min-h-[120px]" placeholder="One concern per line" />
+            </label>
+            <label className="space-y-2 text-sm font-medium text-slate-700 xl:col-span-2">
+              Secondary concerns
+              <Textarea {...form.register("analysisSecondaryConcernsText")} className="min-h-[120px]" placeholder="One concern per line" />
+            </label>
+            <label className="space-y-2 text-sm font-medium text-slate-700 xl:col-span-2">
+              Positive findings
+              <Textarea {...form.register("analysisPositiveFindingsText")} className="min-h-[120px]" placeholder="One finding per line" />
+            </label>
+          </div>
+        </Card>
+
         <section className="grid gap-4 xl:grid-cols-2">
           {productFields.map((field) => (
             <Card className="space-y-4 border border-slate-200 shadow-none" key={field.prefix}>

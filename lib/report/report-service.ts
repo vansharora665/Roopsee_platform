@@ -565,12 +565,84 @@ async function cleanupManagedReportFiles(report: {
   );
 }
 
+function buildAnalysisFromDoctorOverride(
+  analysisOverride: NonNullable<DoctorReviewInputDto["analysisOverride"]>
+): AnalysisOutput {
+  const normalizedScore = normalizeSkinScore(analysisOverride.skinScore);
+
+  return {
+    skin_score: {
+      score: normalizedScore,
+      label: getSkinScoreLabel(normalizedScore)
+    },
+    overall_skin_profile: {
+      skin_type: analysisOverride.skinType,
+      condition: analysisOverride.condition,
+      overall_severity: analysisOverride.overallSeverity
+    },
+    key_skin_concerns: {
+      primary: analysisOverride.primaryConcerns,
+      secondary: analysisOverride.secondaryConcerns
+    },
+    positive_findings: analysisOverride.positiveFindings,
+    primary_observations: {
+      oil_levels: analysisOverride.oilLevels,
+      hydration: analysisOverride.hydration,
+      texture: analysisOverride.texture,
+      tone: analysisOverride.tone
+    }
+  };
+}
+
+function buildDoctorEditedAnalysisUpdate(
+  analysisOverride: NonNullable<DoctorReviewInputDto["analysisOverride"]>
+) {
+  const rawModelJson = buildAnalysisFromDoctorOverride(analysisOverride);
+
+  return {
+    skinScore: rawModelJson.skin_score.score,
+    skinScoreLabel: rawModelJson.skin_score.label,
+    skinType: analysisOverride.skinType,
+    condition: analysisOverride.condition,
+    overallSeverity: analysisOverride.overallSeverity,
+    primaryConcerns: analysisOverride.primaryConcerns as Prisma.InputJsonValue,
+    secondaryConcerns: analysisOverride.secondaryConcerns as Prisma.InputJsonValue,
+    positiveFindings: analysisOverride.positiveFindings as Prisma.InputJsonValue,
+    oilLevels: analysisOverride.oilLevels,
+    hydration: analysisOverride.hydration,
+    texture: analysisOverride.texture,
+    tone: analysisOverride.tone,
+    rawModelJson: rawModelJson as Prisma.InputJsonValue
+  };
+}
+
 export async function updateDoctorReview(
   reportId: string,
   input: DoctorReviewInputDto
 ): Promise<ReportDetailDto> {
   const reviewer = await getCurrentUser();
   const validatedInput = doctorReviewUpdateSchema.parse(input);
+  const { analysisOverride, ...doctorReviewInput } = validatedInput;
+
+  const existingReport = await prisma.report.findUnique({
+    where: {
+      id: reportId
+    },
+    include: reportInclude
+  });
+
+  if (!existingReport) {
+    throw new Error("Report not found");
+  }
+
+  const rerankedMatches = analysisOverride
+    ? rankProductsForDraft({
+        patientSkinType: analysisOverride.skinType,
+        quizSummaryJson: existingReport.assets?.quizSummaryJson ?? undefined,
+        draft: normalizeDraftScore(buildDraftFromAnalysis(buildAnalysisFromDoctorOverride(analysisOverride))),
+        catalog: await prisma.productCatalog.findMany()
+      })
+    : null;
 
   const report = await prisma.report.update({
     where: {
@@ -579,10 +651,31 @@ export async function updateDoctorReview(
     data: {
       doctorReview: {
         update: {
-          ...validatedInput,
+          ...doctorReviewInput,
           reviewedByUserId: reviewer?.id ?? null
         }
-      }
+      },
+      ...(analysisOverride
+        ? {
+            analysisOutput: {
+              update: buildDoctorEditedAnalysisUpdate(analysisOverride)
+            },
+            productMatches: {
+              deleteMany: {},
+              create: rerankedMatches?.map((match) => ({
+                slot: match.slot,
+                rank: match.rank,
+                matchScore: match.matchScore,
+                reasonJson: match.reasonJson as Prisma.InputJsonValue,
+                product: {
+                  connect: {
+                    id: match.product.id
+                  }
+                }
+              }))
+            }
+          }
+        : {})
     },
     include: reportInclude
   });

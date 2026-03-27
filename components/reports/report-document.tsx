@@ -52,6 +52,24 @@ function renderStringList(items: string[], emptyText: string) {
   );
 }
 
+function getCleanserDisplayLabel(
+  brand?: string | null,
+  company?: string | null,
+  product?: string | null
+) {
+  const combined = [brand, company, product].filter(Boolean).join(" ").toLowerCase();
+
+  if (combined.includes("facewash") || combined.includes("face wash")) {
+    return "Facewash";
+  }
+
+  if (combined.includes("cleanser")) {
+    return "Cleanser";
+  }
+
+  return "Cleanser / Facewash";
+}
+
 function renderVerifiedStamp(report: ReportDetailDto) {
   if (!["approved", "sent_to_user"].includes(report.status)) {
     return null;
@@ -78,7 +96,6 @@ export function ReportDocument({ report }: { report: ReportDetailDto }) {
       <section className="report-page">
         <div className="title-wrap">
           <h1 className="title">Skin Analysis Report</h1>
-          {renderVerifiedStamp(report)}
         </div>
 
         <div className="top-grid">
@@ -210,7 +227,11 @@ export function ReportDocument({ report }: { report: ReportDetailDto }) {
             <div className="section-header blue">Recommended Products</div>
             <div className="section-content">
               {renderProductLine(
-                "Cleanser",
+                getCleanserDisplayLabel(
+                  report.doctorReview.cleanserBrand,
+                  report.doctorReview.cleanserCompany,
+                  report.doctorReview.cleanserProductName
+                ),
                 report.doctorReview.cleanserBrand,
                 report.doctorReview.cleanserCompany,
                 report.doctorReview.cleanserProductName
@@ -278,6 +299,8 @@ export function ReportDocument({ report }: { report: ReportDetailDto }) {
             </div>
           </div>
         </div>
+
+        <div className="bottom-approval-row">{renderVerifiedStamp(report)}</div>
 
         <div className="footer">
           <div>

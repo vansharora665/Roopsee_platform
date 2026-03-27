@@ -40,7 +40,7 @@ export const reportTemplateStyles = `
     width: 794px;
     min-height: 1122px;
     margin: 0 auto 16px auto;
-    padding: 24px 22px;
+    padding: 26px 24px;
     background: white;
     border-radius: 24px;
     box-shadow: 0 16px 40px rgba(39, 66, 109, 0.08);
@@ -56,8 +56,8 @@ export const reportTemplateStyles = `
 
   .title-wrap {
     position: relative;
-    min-height: 128px;
-    margin-bottom: 24px;
+    min-height: 88px;
+    margin-bottom: 28px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -65,9 +65,9 @@ export const reportTemplateStyles = `
 
   .title {
     text-align: center;
-    font-size: 34px;
-    line-height: 1.08;
-    letter-spacing: 0.02em;
+    font-size: 35px;
+    line-height: 1.06;
+    letter-spacing: 0.025em;
     font-weight: 800;
     color: var(--navy);
     margin: 0 auto;
@@ -75,21 +75,19 @@ export const reportTemplateStyles = `
   }
 
   .verified-stamp {
-    position: absolute;
-    top: 0;
-    right: 4px;
+    position: relative;
     width: 138px;
     height: 138px;
     border-radius: 999px;
-    border: 3px solid rgba(45, 123, 71, 0.9);
-    background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.98) 0%, rgba(226, 245, 231, 0.92) 62%, rgba(187, 229, 196, 0.95) 100%);
+    border: 3px solid rgba(45, 123, 71, 0.92);
+    background: radial-gradient(circle at 50% 45%, rgba(255,255,255,0.99) 0%, rgba(232, 247, 236, 0.95) 58%, rgba(194, 231, 202, 0.98) 100%);
     color: #1f6c3f;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     text-align: center;
-    transform: rotate(-11deg);
+    transform: rotate(-8deg);
     padding: 14px;
     box-shadow: 0 10px 22px rgba(39, 66, 109, 0.14);
     isolation: isolate;
@@ -128,11 +126,21 @@ export const reportTemplateStyles = `
     max-width: 88px;
   }
 
+  .bottom-approval-row {
+    position: absolute;
+    left: 24px;
+    right: 24px;
+    bottom: 92px;
+    display: flex;
+    justify-content: flex-end;
+    pointer-events: none;
+  }
+
   .top-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 12px 14px;
-    margin-bottom: 18px;
+    gap: 14px 16px;
+    margin-bottom: 22px;
   }
 
   .pill {
@@ -164,9 +172,9 @@ export const reportTemplateStyles = `
   .images {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 24px;
+    gap: 28px;
     justify-items: center;
-    margin: 22px 0 18px 0;
+    margin: 26px 0 22px 0;
   }
 
   .image-slot {
@@ -196,18 +204,18 @@ export const reportTemplateStyles = `
   }
 
   .score-wrap {
-    margin: 12px auto 22px auto;
-    padding: 16px 20px 18px 20px;
+    margin: 16px auto 26px auto;
+    padding: 18px 22px 20px 22px;
     border: 2px solid rgba(24, 38, 53, 0.2);
     border-radius: 999px;
   }
 
   .score-label {
     text-align: center;
-    font-size: 20px;
+    font-size: 21px;
     font-weight: 800;
     color: var(--navy-dark);
-    margin-bottom: 12px;
+    margin-bottom: 14px;
     text-transform: uppercase;
   }
 
@@ -275,8 +283,8 @@ export const reportTemplateStyles = `
   .panel-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 18px;
-    margin-top: 14px;
+    gap: 22px;
+    margin-top: 18px;
   }
 
   .section-box {
@@ -304,9 +312,9 @@ export const reportTemplateStyles = `
   .section-header.green { background: var(--green); }
 
   .section-content {
-    padding: 16px 18px 18px 18px;
+    padding: 18px 20px 20px 20px;
     font-size: 17px;
-    line-height: 1.5;
+    line-height: 1.58;
   }
 
   .section-content p {
@@ -324,22 +332,22 @@ export const reportTemplateStyles = `
   }
 
   .meta-list li {
-    margin-bottom: 6px;
+    margin-bottom: 7px;
   }
 
   .columns {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 14px;
+    gap: 16px;
   }
 
   .product-item {
-    margin-bottom: 10px;
-    font-size: 16px;
+    margin-bottom: 12px;
+    font-size: 16.5px;
   }
 
   .product-item strong {
-    font-size: 19px;
+    font-size: 19.5px;
   }
 
   .placeholder {
@@ -350,19 +358,19 @@ export const reportTemplateStyles = `
   .routine-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 20px;
-    margin-top: 8px;
+    gap: 24px;
+    margin-top: 12px;
   }
 
   .routine-card {
     border: 2px solid #e3eaf6;
     border-radius: 18px;
-    padding: 16px;
+    padding: 18px;
     background: #fcfdff;
   }
 
   .routine-card h3 {
-    margin: 0 0 10px 0;
+    margin: 0 0 12px 0;
     color: var(--navy-dark);
     font-size: 19px;
     text-transform: uppercase;
@@ -380,9 +388,9 @@ export const reportTemplateStyles = `
 
   .footer {
     position: absolute;
-    left: 22px;
-    right: 22px;
-    bottom: 26px;
+    left: 24px;
+    right: 24px;
+    bottom: 24px;
     border-top: 2px solid #dce4f2;
     padding-top: 14px;
     display: flex;
@@ -419,39 +427,43 @@ export const reportTemplateStyles = `
     }
 
     .report-page:first-of-type {
-      padding: 17px 15px 15px 15px;
+      padding: 18px 16px 16px 16px;
     }
 
     .report-page:first-of-type .title-wrap {
-      min-height: 110px;
-      margin-bottom: 8px;
+      min-height: 84px;
+      margin-bottom: 12px;
     }
 
     .report-page:first-of-type .title {
-      font-size: 29px;
+      font-size: 30px;
       margin: 0 auto;
     }
 
-    .report-page:first-of-type .verified-stamp {
-      width: 108px;
-      height: 108px;
-      border-width: 3px;
-      top: 0;
+    .report-page:nth-of-type(2) .bottom-approval-row {
+      left: 16px;
+      right: 16px;
+      bottom: 66px;
+    }
+
+    .report-page:nth-of-type(2) .verified-stamp {
+      width: 110px;
+      height: 110px;
       padding: 10px;
     }
 
-    .report-page:first-of-type .verified-stamp-title {
+    .report-page:nth-of-type(2) .verified-stamp-title {
       font-size: 10px;
     }
 
-    .report-page:first-of-type .verified-stamp-subtitle,
-    .report-page:first-of-type .verified-stamp-date {
+    .report-page:nth-of-type(2) .verified-stamp-subtitle,
+    .report-page:nth-of-type(2) .verified-stamp-date {
       font-size: 8.6px;
     }
 
     .report-page:first-of-type .top-grid {
-      gap: 6px 8px;
-      margin-bottom: 10px;
+      gap: 8px 10px;
+      margin-bottom: 12px;
     }
 
     .report-page:first-of-type .pill-label {
@@ -466,24 +478,24 @@ export const reportTemplateStyles = `
     }
 
     .report-page:first-of-type .images {
-      gap: 12px;
-      margin: 12px 0 10px 0;
+      gap: 16px;
+      margin: 16px 0 14px 0;
     }
 
     .report-page:first-of-type .image-slot {
-      width: 154px;
-      height: 154px;
+      width: 160px;
+      height: 160px;
       border-width: 4px;
     }
 
     .report-page:first-of-type .score-wrap {
-      margin: 6px auto 12px auto;
-      padding: 11px 14px 13px 14px;
+      margin: 10px auto 14px auto;
+      padding: 12px 15px 14px 15px;
     }
 
     .report-page:first-of-type .score-label {
-      font-size: 15.3px;
-      margin-bottom: 5px;
+      font-size: 16px;
+      margin-bottom: 6px;
     }
 
     .report-page:first-of-type .score-point {
@@ -501,42 +513,42 @@ export const reportTemplateStyles = `
     }
 
     .report-page:first-of-type .panel-grid {
-      gap: 12px;
-      margin-top: 8px;
+      gap: 14px;
+      margin-top: 10px;
     }
 
     .report-page:first-of-type .columns {
-      gap: 8px;
+      gap: 10px;
     }
 
     .report-page:first-of-type .section-header {
-      padding: 9px 14px;
-      font-size: 15px;
+      padding: 10px 15px;
+      font-size: 15.4px;
     }
 
     .report-page:first-of-type .section-content {
-      padding: 11px 14px 13px 14px;
-      font-size: 13.5px;
-      line-height: 1.3;
+      padding: 12px 15px 14px 15px;
+      font-size: 14px;
+      line-height: 1.36;
     }
 
     .report-page:first-of-type .meta-list li,
     .report-page:first-of-type .product-item {
-      margin-bottom: 3px;
+      margin-bottom: 4px;
     }
 
     .report-page:first-of-type .product-item {
-      font-size: 13.5px;
-      line-height: 1.32;
+      font-size: 14px;
+      line-height: 1.36;
     }
 
     .report-page:first-of-type .product-item strong {
-      font-size: 15px;
+      font-size: 15.4px;
     }
 
     .report-page:nth-of-type(2) {
       padding-top: 20px;
-      padding-bottom: 108px;
+      padding-bottom: 152px;
     }
 
     .report-page:nth-of-type(2) .title {

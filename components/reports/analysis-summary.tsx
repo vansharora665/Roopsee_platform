@@ -19,7 +19,7 @@ function SummaryList({ items, emptyLabel = "None noted" }: { items: string[]; em
 function slotTitle(slot: ProductMatchDto["slot"]) {
   switch (slot) {
     case "cleanser":
-      return "Cleanser";
+      return "Cleanser / Facewash";
     case "sunscreen":
       return "Sunscreen";
     case "moisturizer":
@@ -87,9 +87,9 @@ export function AnalysisSummary({ report }: { report: ReportDetailDto }) {
         <Card className="space-y-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-blue">
-              Read-only observations
+              Editable analysis context
             </p>
-            <h2 className="text-xl font-semibold text-slate-900">Model-owned fields</h2>
+            <h2 className="text-xl font-semibold text-slate-900">Doctor-adjustable predicted fields</h2>
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             {[

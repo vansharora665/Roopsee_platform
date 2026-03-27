@@ -9,11 +9,7 @@ import {
 } from "@/lib/supabase/profile-normalizer";
 
 function getProfilesTableName() {
-  return process.env.SUPABASE_PROFILES_TABLE ?? "users";
-}
-
-function getQuizResultsTableName() {
-  return process.env.SUPABASE_QUIZ_RESULTS_TABLE ?? "quiz_results";
+  return process.env.SUPABASE_PROFILES_TABLE ?? "master_user_quiz";
 }
 
 function getUpdatedAtColumn() {
@@ -37,49 +33,12 @@ function stringArrayFromUnknown(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
-type OrderedScanBundle = {
-  front: string[];
-  left: string[];
-  right: string[];
-  ordered_scan_urls: string[];
-  raw: Record<string, unknown>;
-};
-
 type ApprovedProductExport = {
   slot: string;
   brand?: string;
   company?: string;
   product_name?: string;
 };
-
-function isMissingColumnError(message: string) {
-  return /column .* does not exist|Could not find the .* column/i.test(message);
-}
-
-function getRowTimestamp(row: Record<string, unknown>) {
-  const value = readString(row.updated_at) ?? readString(row.created_at);
-  return value ? Date.parse(value) || 0 : 0;
-}
-
-function buildLatestRowMap(rows: Record<string, unknown>[], linkColumn: string) {
-  const map = new Map<string, Record<string, unknown>>();
-
-  for (const row of rows) {
-    const key = readString(row[linkColumn]);
-
-    if (!key) {
-      continue;
-    }
-
-    const existing = map.get(key);
-
-    if (!existing || getRowTimestamp(row) >= getRowTimestamp(existing)) {
-      map.set(key, row);
-    }
-  }
-
-  return map;
-}
 
 function serializeSyncedProfile(record: {
   id: string;
@@ -126,144 +85,6 @@ function serializeSyncedProfile(record: {
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString()
   };
-}
-
-function getScanFieldReferences(row: Record<string, unknown>, fieldNames: string[]) {
-  return Array.from(
-    new Set(
-      fieldNames.flatMap((fieldName) => {
-        const value = row[fieldName];
-        return value === undefined ? [] : extractScanStrings(value);
-      })
-    )
-  );
-}
-
-function buildQuizResultScanBundle(quizRow: Record<string, unknown>): OrderedScanBundle {
-  const front = getScanFieldReferences(quizRow, ["image_url", "front", "front_url", "front_image_url"]);
-  const left = getScanFieldReferences(quizRow, ["image_url_left", "left", "left_url", "left_image_url"]);
-  const right = getScanFieldReferences(quizRow, ["image_url_right", "right", "right_url", "right_image_url"]);
-  const orderedScanUrls = [...front, ...left, ...right];
-
-  return {
-    front,
-    left,
-    right,
-    ordered_scan_urls: Array.from(new Set(orderedScanUrls)),
-    raw: quizRow
-  };
-}
-
-function getProfileLinkValue(row: Record<string, unknown>, column: string) {
-  if (column === "email") {
-    return readString(row.email);
-  }
-
-  if (column === "phone_no" || column === "phone") {
-    return readString(row.phone_no) ?? readString(row.phone);
-  }
-
-  return readString(row.id);
-}
-
-async function fetchQuizResultMap(profileRows: Record<string, unknown>[]) {
-  if (profileRows.length === 0) {
-    return {
-      map: new Map<string, Record<string, unknown>>(),
-      linkColumn: null as string | null
-    };
-  }
-
-  const supabase = getSupabaseAdminClient();
-  const table = getQuizResultsTableName();
-  const candidateColumns = Array.from(
-    new Set(
-      [
-        process.env.SUPABASE_QUIZ_RESULTS_LINK_COLUMN,
-        "user_id",
-        "profile_id",
-        "id",
-        "email"
-      ].filter((value): value is string => Boolean(value))
-    )
-  );
-
-  let lastError: Error | null = null;
-
-  for (const column of candidateColumns) {
-    const identifiers = Array.from(
-      new Set(
-        profileRows
-          .map((row) => getProfileLinkValue(row, column))
-          .filter((value): value is string => Boolean(value))
-      )
-    );
-
-    if (identifiers.length === 0) {
-      continue;
-    }
-
-    const { data, error } = await supabase.from(table).select("*").in(column, identifiers);
-
-    if (!error) {
-      return {
-        map: buildLatestRowMap((data ?? []) as Record<string, unknown>[], column),
-        linkColumn: column
-      };
-    }
-
-    if (!isMissingColumnError(error.message)) {
-      throw new Error(`Supabase quiz_results fetch failed: ${error.message}`);
-    }
-
-    lastError = new Error(error.message);
-  }
-
-  if (lastError) {
-    throw new Error(
-      `Supabase quiz_results mapping failed. Tried link columns ${candidateColumns.join(", ")} but none worked.`
-    );
-  }
-
-  return {
-    map: new Map<string, Record<string, unknown>>(),
-    linkColumn: null as string | null
-  };
-}
-
-function mergeProfileRowWithQuizResult(
-  profileRow: Record<string, unknown>,
-  quizRow: Record<string, unknown> | undefined
-) {
-  if (!quizRow) {
-    return profileRow;
-  }
-
-  const scanBundle = buildQuizResultScanBundle(quizRow);
-
-  return {
-    ...profileRow,
-    gender: readString(quizRow.gender) ?? readString(profileRow.gender),
-    sex: readString(quizRow.gender) ?? readString(profileRow.sex),
-    answers: quizRow.answers ?? profileRow.answers,
-    skin_quiz: quizRow.answers ?? profileRow.skin_quiz,
-    image_url: scanBundle.front[0] ?? profileRow.image_url,
-    image_url_left: scanBundle.left[0] ?? profileRow.image_url_left,
-    image_url_right: scanBundle.right[0] ?? profileRow.image_url_right,
-    scans: scanBundle,
-    quiz_results: quizRow
-  };
-}
-
-async function enrichProfileRowsWithQuizResults(rows: Record<string, unknown>[]) {
-  const { map, linkColumn } = await fetchQuizResultMap(rows);
-
-  return rows.map((row) => {
-    const key = linkColumn ? getProfileLinkValue(row, linkColumn) : null;
-    const quizRow = key ? map.get(key) : undefined;
-
-    return mergeProfileRowWithQuizResult(row, quizRow);
-  });
 }
 
 async function upsertNormalizedProfile(row: Record<string, unknown>) {
@@ -344,11 +165,10 @@ async function fetchSupabaseProfileRowsByEmails(emails: string[]) {
   return (data ?? []) as Record<string, unknown>[];
 }
 
-async function syncEnrichedProfileRows(rows: Record<string, unknown>[]) {
-  const enrichedRows = await enrichProfileRowsWithQuizResults(rows);
+async function syncProfileRows(rows: Record<string, unknown>[]) {
   const synced = [];
 
-  for (const row of enrichedRows) {
+  for (const row of rows) {
     synced.push(await upsertNormalizedProfile(row));
   }
 
@@ -363,7 +183,7 @@ export async function syncSupabaseProfileByExternalId(externalId: string) {
     return null;
   }
 
-  const [profile] = await syncEnrichedProfileRows([matchingRow]);
+  const [profile] = await syncProfileRows([matchingRow]);
   return profile ?? null;
 }
 
@@ -375,7 +195,7 @@ export async function syncSupabaseProfileByEmail(email: string) {
     return null;
   }
 
-  const [profile] = await syncEnrichedProfileRows([matchingRow]);
+  const [profile] = await syncProfileRows([matchingRow]);
   return profile ?? null;
 }
 
@@ -394,7 +214,7 @@ export async function syncSupabaseProfiles(limit = 50) {
   }
 
   const rawRows = (data ?? []) as Record<string, unknown>[];
-  return syncEnrichedProfileRows(rawRows);
+  return syncProfileRows(rawRows);
 }
 
 export async function listSyncedProfiles() {
@@ -417,33 +237,7 @@ export async function getSyncedProfileById(id: string) {
 }
 
 export async function ingestSupabaseWebhookRow(row: Record<string, unknown>) {
-  const looksLikeQuizResult = ["answers", "image_url", "image_url_left", "image_url_right", "gender"].some(
-    (key) => key in row
-  );
-
-  if (looksLikeQuizResult) {
-    const profileId = readString(row.user_id) ?? readString(row.profile_id) ?? readString(row.id);
-    const email = readString(row.email);
-
-    if (profileId) {
-      const syncedProfile = await syncSupabaseProfileByExternalId(profileId);
-      if (syncedProfile) {
-        return syncedProfile;
-      }
-    }
-
-    if (email) {
-      const syncedProfile = await syncSupabaseProfileByEmail(email);
-      if (syncedProfile) {
-        return syncedProfile;
-      }
-    }
-
-    throw new Error("Could not find matching users row for quiz_results webhook payload");
-  }
-
-  const [enrichedRow] = await enrichProfileRowsWithQuizResults([row]);
-  const record = await upsertNormalizedProfile(enrichedRow ?? row);
+  const record = await upsertNormalizedProfile(row);
   return serializeSyncedProfile(record);
 }
 

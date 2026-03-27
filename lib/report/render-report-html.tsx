@@ -51,6 +51,24 @@ function renderStringList(items: string[], emptyText: string) {
     .join("")}</ul>`;
 }
 
+function getCleanserDisplayLabel(
+  brand?: string | null,
+  company?: string | null,
+  product?: string | null
+) {
+  const combined = [brand, company, product].filter(Boolean).join(" ").toLowerCase();
+
+  if (combined.includes("facewash") || combined.includes("face wash")) {
+    return "Facewash";
+  }
+
+  if (combined.includes("cleanser")) {
+    return "Cleanser";
+  }
+
+  return "Cleanser / Facewash";
+}
+
 function renderImageSlot(image: string | null | undefined, index: number) {
   if (image) {
     return `<div class="image-slot"><img src="${escapeHtml(image)}" alt="Facial input ${index + 1}" /></div>`;
@@ -97,7 +115,6 @@ export function renderReportHtml(report: ReportDetailDto) {
       <section class="report-page">
         <div class="title-wrap">
           <h1 class="title">Skin Analysis Report</h1>
-          ${renderVerifiedStamp(report)}
         </div>
 
         <div class="top-grid">
@@ -190,7 +207,11 @@ export function renderReportHtml(report: ReportDetailDto) {
             <div class="section-header blue">Recommended Products</div>
             <div class="section-content">
               ${renderProductLine(
-                "Cleanser",
+                getCleanserDisplayLabel(
+                  report.doctorReview.cleanserBrand,
+                  report.doctorReview.cleanserCompany,
+                  report.doctorReview.cleanserProductName
+                ),
                 report.doctorReview.cleanserBrand,
                 report.doctorReview.cleanserCompany,
                 report.doctorReview.cleanserProductName
@@ -254,6 +275,8 @@ export function renderReportHtml(report: ReportDetailDto) {
             </div>
           </div>
         </div>
+
+        <div class="bottom-approval-row">${renderVerifiedStamp(report)}</div>
 
         <div class="footer">
           <div>
