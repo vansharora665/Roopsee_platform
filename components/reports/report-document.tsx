@@ -253,13 +253,6 @@ export function ReportDocument({ report }: { report: ReportDetailDto }) {
         </div>
 
         <div className="panel-grid" style={{ marginTop: "18px" }}>
-          <div className="section-box full">
-            <div className="section-header blue">Expert Tips</div>
-            <div className="section-content">
-              {renderStringList(report.doctorReview.expertTips, "Doctor has not added expert tips yet.")}
-            </div>
-          </div>
-
           <div className="section-box">
             <div className="section-header green">Do This</div>
             <div className="section-content">

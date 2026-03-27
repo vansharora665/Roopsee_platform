@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useFieldArray, useForm } from "react-hook-form";
@@ -10,11 +10,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { DEFAULT_USAGE_AMOUNTS, DO_THIS_OPTIONS, NOT_THAT_OPTIONS } from "@/lib/report/default-guidance";
-import type { ReportDetailDto } from "@/lib/report/types";
-
-type ListItem = {
-  value: string;
-};
+import type { ProductMatchDto, ReportDetailDto } from "@/lib/report/types";
 
 type RoutineItem = {
   step: string;
@@ -38,12 +34,12 @@ type DoctorReviewFormValues = {
   nightRoutine: RoutineItem[];
   doThisSelections: string[];
   notThatSelections: string[];
-  expertTipItems: ListItem[];
   doctorNotes: string;
 };
 
 const productFields = [
   {
+    slot: "cleanser",
     prefix: "cleanser",
     title: "Cleanser",
     brand: "cleanserBrand",
@@ -51,6 +47,7 @@ const productFields = [
     productName: "cleanserProductName"
   },
   {
+    slot: "sunscreen",
     prefix: "sunscreen",
     title: "Sunscreen",
     brand: "sunscreenBrand",
@@ -58,6 +55,7 @@ const productFields = [
     productName: "sunscreenProductName"
   },
   {
+    slot: "moisturizer",
     prefix: "moisturizer",
     title: "Moisturizer",
     brand: "moisturizerBrand",
@@ -65,6 +63,7 @@ const productFields = [
     productName: "moisturizerProductName"
   },
   {
+    slot: "repair_serum",
     prefix: "repairSerum",
     title: "Repair / Serum",
     brand: "repairSerumBrand",
@@ -72,16 +71,13 @@ const productFields = [
     productName: "repairSerumProductName"
   }
 ] as const satisfies ReadonlyArray<{
+  slot: "cleanser" | "sunscreen" | "moisturizer" | "repair_serum";
   prefix: string;
   title: string;
   brand: keyof DoctorReviewFormValues;
   company: keyof DoctorReviewFormValues;
   productName: keyof DoctorReviewFormValues;
 }>;
-
-function asListItems(values: string[]) {
-  return values.length ? values.map((value) => ({ value })) : [{ value: "" }];
-}
 
 function FieldArrayHeader({
   label,
@@ -157,6 +153,19 @@ function SelectionDropdown({
   );
 }
 
+function matchesSuggestion(
+  suggestion: ProductMatchDto,
+  brand: string,
+  company: string,
+  productName: string
+) {
+  return (
+    suggestion.product.brandName === brand &&
+    suggestion.product.brandName === company &&
+    suggestion.product.productName === productName
+  );
+}
+
 export function DoctorReviewForm({ report }: { report: ReportDetailDto }) {
   const router = useRouter();
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -185,14 +194,12 @@ export function DoctorReviewForm({ report }: { report: ReportDetailDto }) {
         : [{ step: "", usageAmount: "" }],
       doThisSelections: report.doctorReview.doThis,
       notThatSelections: report.doctorReview.notThat,
-      expertTipItems: asListItems(report.doctorReview.expertTips),
       doctorNotes: report.doctorReview.doctorNotes ?? ""
     }
   });
 
   const morningRoutine = useFieldArray({ control: form.control, name: "morningRoutine" });
   const nightRoutine = useFieldArray({ control: form.control, name: "nightRoutine" });
-  const expertTipItems = useFieldArray({ control: form.control, name: "expertTipItems" });
 
   const doThisSelections = form.watch("doThisSelections");
   const notThatSelections = form.watch("notThatSelections");
@@ -207,6 +214,39 @@ export function DoctorReviewForm({ report }: { report: ReportDetailDto }) {
     ],
     []
   );
+
+  const suggestionsBySlot = useMemo(() => {
+    return productFields.reduce<Record<string, ProductMatchDto[]>>((accumulator, field) => {
+      accumulator[field.slot] = report.productMatches
+        .filter((match) => match.slot === field.slot)
+        .sort((left, right) => left.rank - right.rank)
+        .slice(0, 3);
+
+      return accumulator;
+    }, {});
+  }, [report.productMatches]);
+
+  useEffect(() => {
+    for (const field of productFields) {
+      const hasExistingSelection = Boolean(
+        form.getValues(field.brand) || form.getValues(field.company) || form.getValues(field.productName)
+      );
+
+      if (hasExistingSelection) {
+        continue;
+      }
+
+      const defaultSuggestion = suggestionsBySlot[field.slot]?.[0];
+
+      if (!defaultSuggestion) {
+        continue;
+      }
+
+      form.setValue(field.brand, defaultSuggestion.product.brandName, { shouldDirty: false });
+      form.setValue(field.company, defaultSuggestion.product.brandName, { shouldDirty: false });
+      form.setValue(field.productName, defaultSuggestion.product.productName, { shouldDirty: false });
+    }
+  }, [form, suggestionsBySlot]);
 
   function toggleSelection(name: "doThisSelections" | "notThatSelections", value: string) {
     const currentValues = form.getValues(name);
@@ -235,9 +275,33 @@ export function DoctorReviewForm({ report }: { report: ReportDetailDto }) {
       nightRoutine: values.nightRoutine.filter((item) => item.step.trim() && item.usageAmount.trim()),
       doThis: Array.from(new Set(values.doThisSelections.map((item) => item.trim()).filter(Boolean))),
       notThat: Array.from(new Set(values.notThatSelections.map((item) => item.trim()).filter(Boolean))),
-      expertTips: values.expertTipItems.map((item) => item.value.trim()).filter(Boolean),
+      expertTips: [],
       doctorNotes: values.doctorNotes.trim() || null
     };
+  }
+
+  function applySuggestedProduct(field: (typeof productFields)[number], suggestion: ProductMatchDto | null) {
+    if (!suggestion) {
+      form.setValue(field.brand, "", { shouldDirty: true });
+      form.setValue(field.company, "", { shouldDirty: true });
+      form.setValue(field.productName, "", { shouldDirty: true });
+      return;
+    }
+
+    form.setValue(field.brand, suggestion.product.brandName, { shouldDirty: true });
+    form.setValue(field.company, suggestion.product.brandName, { shouldDirty: true });
+    form.setValue(field.productName, suggestion.product.productName, { shouldDirty: true });
+  }
+
+  function getSelectedSuggestionId(field: (typeof productFields)[number]) {
+    const brand = form.watch(field.brand);
+    const company = form.watch(field.company);
+    const productName = form.watch(field.productName);
+    const matchedSuggestion = (suggestionsBySlot[field.slot] ?? []).find((suggestion) =>
+      matchesSuggestion(suggestion, brand, company, productName)
+    );
+
+    return matchedSuggestion?.id ?? "manual";
   }
 
   async function saveReview() {
@@ -320,13 +384,13 @@ export function DoctorReviewForm({ report }: { report: ReportDetailDto }) {
             </div>
             <div className="md:col-span-2">
               <p className="text-sm text-slate-500">Questionnaire</p>
-              <p className="text-sm text-slate-700 whitespace-pre-wrap">
+              <p className="whitespace-pre-wrap text-sm text-slate-700">
                 {report.assets.questionnaireText || "No questionnaire notes added"}
               </p>
             </div>
             <div className="md:col-span-2">
               <p className="text-sm text-slate-500">Manual findings</p>
-              <p className="text-sm text-slate-700 whitespace-pre-wrap">
+              <p className="whitespace-pre-wrap text-sm text-slate-700">
                 {report.assets.rawFindingsText || "No manual findings added"}
               </p>
             </div>
@@ -445,7 +509,65 @@ export function DoctorReviewForm({ report }: { report: ReportDetailDto }) {
         <section className="grid gap-4 xl:grid-cols-2">
           {productFields.map((field) => (
             <Card className="space-y-4 border border-slate-200 shadow-none" key={field.prefix}>
-              <h3 className="text-lg font-semibold text-slate-900">{field.title}</h3>
+              <div className="space-y-1">
+                <h3 className="text-lg font-semibold text-slate-900">{field.title}</h3>
+                <p className="text-sm text-slate-600">
+                  Choose from the top 3 matched products. The first suggestion is kept as the default.
+                </p>
+              </div>
+              <div className="space-y-3">
+                {(suggestionsBySlot[field.slot] ?? []).map((suggestion, index) => {
+                  const selected = getSelectedSuggestionId(field) === suggestion.id;
+
+                  return (
+                    <label
+                      key={suggestion.id}
+                      className={`flex cursor-pointer gap-3 rounded-2xl border p-3 transition ${
+                        selected
+                          ? "border-brand-blue bg-brand-blue/5"
+                          : "border-slate-200 bg-white hover:border-slate-300"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name={`${field.prefix}-suggestion`}
+                        className="mt-1 h-4 w-4 border-slate-300 text-brand-blue focus:ring-brand-blue"
+                        checked={selected}
+                        onChange={() => applySuggestedProduct(field, suggestion)}
+                      />
+                      <div className="space-y-1 text-sm">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                            Option {index + 1}
+                          </span>
+                          {index === 0 ? (
+                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+                              Default
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="font-semibold text-slate-900">
+                          {suggestion.product.brandName} - {suggestion.product.productName}
+                        </p>
+                        <p className="text-slate-600">Match score: {Math.round(suggestion.matchScore)} / 100</p>
+                      </div>
+                    </label>
+                  );
+                })}
+                <label className="flex cursor-pointer gap-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-3 text-sm text-slate-700">
+                  <input
+                    type="radio"
+                    name={`${field.prefix}-suggestion`}
+                    className="mt-1 h-4 w-4 border-slate-300 text-brand-blue focus:ring-brand-blue"
+                    checked={getSelectedSuggestionId(field) === "manual"}
+                    onChange={() => applySuggestedProduct(field, null)}
+                  />
+                  <div>
+                    <p className="font-semibold text-slate-900">Custom selection</p>
+                    <p>Switch here if the doctor wants to override the suggested options manually.</p>
+                  </div>
+                </label>
+              </div>
               <div className="grid gap-3 md:grid-cols-3">
                 <label className="space-y-2 text-sm font-medium text-slate-700">
                   Brand
@@ -555,26 +677,6 @@ export function DoctorReviewForm({ report }: { report: ReportDetailDto }) {
             />
           </Card>
         </section>
-
-        <Card className="border border-slate-200 shadow-none">
-          <FieldArrayHeader
-            label="Expert tips"
-            onAdd={() => expertTipItems.append({ value: "" })}
-          />
-          <div className="space-y-3">
-            {expertTipItems.fields.map((field, index) => (
-              <div className="grid gap-3 md:grid-cols-[1fr_auto]" key={field.id}>
-                <Input
-                  {...form.register(`expertTipItems.${index}.value` as const)}
-                  placeholder="Doctor expert tip"
-                />
-                <Button type="button" variant="ghost" onClick={() => expertTipItems.remove(index)}>
-                  Remove
-                </Button>
-              </div>
-            ))}
-          </div>
-        </Card>
 
         <Card className="space-y-3 border border-slate-200 shadow-none">
           <h3 className="text-lg font-semibold text-slate-900">Doctor notes</h3>

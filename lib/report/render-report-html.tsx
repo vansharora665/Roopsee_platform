@@ -233,13 +233,6 @@ export function renderReportHtml(report: ReportDetailDto) {
         </div>
 
         <div class="panel-grid" style="margin-top: 18px">
-          <div class="section-box full">
-            <div class="section-header blue">Expert Tips</div>
-            <div class="section-content">
-              ${renderStringList(report.doctorReview.expertTips, "Doctor has not added expert tips yet.")}
-            </div>
-          </div>
-
           <div class="section-box">
             <div class="section-header green">Do This</div>
             <div class="section-content">
