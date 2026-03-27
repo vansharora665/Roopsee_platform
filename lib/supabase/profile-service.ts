@@ -12,28 +12,12 @@ function getProfilesTableName() {
   return process.env.SUPABASE_PROFILES_TABLE ?? "users";
 }
 
-function getScansTableName() {
-  return process.env.SUPABASE_SCANS_TABLE ?? "skin_scans";
+function getQuizResultsTableName() {
+  return process.env.SUPABASE_QUIZ_RESULTS_TABLE ?? "quiz_results";
 }
 
 function getUpdatedAtColumn() {
   return process.env.SUPABASE_PROFILES_UPDATED_AT_COLUMN ?? "updated_at";
-}
-
-function getStorageBucketName() {
-  return process.env.SUPABASE_STORAGE_BUCKET ?? process.env.SUPABASE_SCANS_BUCKET ?? "skin-scans";
-}
-
-function isHttpUrl(value: string) {
-  return /^https?:\/\//i.test(value);
-}
-
-function stringifyDate(value: Date | null) {
-  return value ? value.toISOString() : null;
-}
-
-function stringArrayFromUnknown(value: unknown) {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
 function readString(value: unknown) {
@@ -45,6 +29,13 @@ function readString(value: unknown) {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function stringifyDate(value: Date | null) {
+  return value ? value.toISOString() : null;
+}
+
+function stringArrayFromUnknown(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
 
 type OrderedScanBundle = {
   front: string[];
@@ -61,85 +52,33 @@ type ApprovedProductExport = {
   product_name?: string;
 };
 
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
+function isMissingColumnError(message: string) {
+  return /column .* does not exist|Could not find the .* column/i.test(message);
 }
 
-
-function getScanOrderScore(value: string) {
-  const lower = value.toLowerCase();
-
-  if (lower.includes("front")) {
-    return 0;
-  }
-
-  if (lower.includes("left")) {
-    return 1;
-  }
-
-  if (lower.includes("right")) {
-    return 2;
-  }
-
-  return 99;
+function getRowTimestamp(row: Record<string, unknown>) {
+  const value = readString(row.updated_at) ?? readString(row.created_at);
+  return value ? Date.parse(value) || 0 : 0;
 }
 
-function orderScanReferences(references: string[]) {
-  return [...references].sort((left, right) => {
-    const scoreDelta = getScanOrderScore(left) - getScanOrderScore(right);
+function buildLatestRowMap(rows: Record<string, unknown>[], linkColumn: string) {
+  const map = new Map<string, Record<string, unknown>>();
 
-    if (scoreDelta !== 0) {
-      return scoreDelta;
+  for (const row of rows) {
+    const key = readString(row[linkColumn]);
+
+    if (!key) {
+      continue;
     }
 
-    return left.localeCompare(right);
-  });
-}
+    const existing = map.get(key);
 
-function normalizeStoragePath(value: string, bucket: string | null) {
-  const trimmed = value.replace(/^\/+/, "");
-
-  if (!bucket) {
-    return trimmed;
+    if (!existing || getRowTimestamp(row) >= getRowTimestamp(existing)) {
+      map.set(key, row);
+    }
   }
 
-  if (trimmed.startsWith(`${bucket}/`)) {
-    return trimmed.slice(bucket.length + 1);
-  }
-
-  return trimmed;
-}
-
-async function resolveScanUrls(references: string[]) {
-  if (references.length === 0) {
-    return [];
-  }
-
-  const supabase = getSupabaseAdminClient();
-  const bucket = getStorageBucketName();
-
-  return Array.from(
-    new Set(
-      references
-        .map((reference) => reference.trim())
-        .filter(Boolean)
-        .map((reference) => {
-          if (isHttpUrl(reference)) {
-            return reference;
-          }
-
-          if (!bucket) {
-            return reference;
-          }
-
-          const publicUrl = supabase.storage
-            .from(bucket)
-            .getPublicUrl(normalizeStoragePath(reference, bucket)).data.publicUrl;
-
-          return publicUrl || reference;
-        })
-    )
-  );
+  return map;
 }
 
 function serializeSyncedProfile(record: {
@@ -200,72 +139,81 @@ function getScanFieldReferences(row: Record<string, unknown>, fieldNames: string
   );
 }
 
-function buildOrderedScanBundle(scanRow: Record<string, unknown>): OrderedScanBundle {
-  const front = getScanFieldReferences(scanRow, ["front", "front_url", "front_image", "front_image_url"]);
-  const left = getScanFieldReferences(scanRow, ["left", "left_url", "left_image", "left_image_url"]);
-  const right = getScanFieldReferences(scanRow, ["right", "right_url", "right_image", "right_image_url"]);
-  const orderedScanUrls = Array.from(new Set(orderScanReferences([...front, ...left, ...right])));
+function buildQuizResultScanBundle(quizRow: Record<string, unknown>): OrderedScanBundle {
+  const front = getScanFieldReferences(quizRow, ["image_url", "front", "front_url", "front_image_url"]);
+  const left = getScanFieldReferences(quizRow, ["image_url_left", "left", "left_url", "left_image_url"]);
+  const right = getScanFieldReferences(quizRow, ["image_url_right", "right", "right_url", "right_image_url"]);
+  const orderedScanUrls = [...front, ...left, ...right];
 
   return {
     front,
     left,
     right,
-    ordered_scan_urls: orderedScanUrls,
-    raw: scanRow
+    ordered_scan_urls: Array.from(new Set(orderedScanUrls)),
+    raw: quizRow
   };
 }
 
-function getScanRowTimestamp(row: Record<string, unknown>) {
-  const value = readString(row.updated_at) ?? readString(row.created_at);
-  return value ? Date.parse(value) || 0 : 0;
-}
-
-function buildScanRowMap(rows: Record<string, unknown>[], linkColumn: string) {
-  const map = new Map<string, Record<string, unknown>>();
-
-  for (const row of rows) {
-    const key = readString(row[linkColumn]);
-
-    if (!key) {
-      continue;
-    }
-
-    const existing = map.get(key);
-
-    if (!existing || getScanRowTimestamp(row) >= getScanRowTimestamp(existing)) {
-      map.set(key, row);
-    }
+function getProfileLinkValue(row: Record<string, unknown>, column: string) {
+  if (column === "email") {
+    return readString(row.email);
   }
 
-  return map;
+  if (column === "phone_no" || column === "phone") {
+    return readString(row.phone_no) ?? readString(row.phone);
+  }
+
+  return readString(row.id);
 }
 
-function isMissingColumnError(message: string) {
-  return /column .* does not exist|Could not find the .* column/i.test(message);
-}
-
-async function fetchScanRowMap(profileIds: string[]) {
-  if (profileIds.length === 0) {
-    return new Map<string, Record<string, unknown>>();
+async function fetchQuizResultMap(profileRows: Record<string, unknown>[]) {
+  if (profileRows.length === 0) {
+    return {
+      map: new Map<string, Record<string, unknown>>(),
+      linkColumn: null as string | null
+    };
   }
 
   const supabase = getSupabaseAdminClient();
-  const table = getScansTableName();
+  const table = getQuizResultsTableName();
   const candidateColumns = Array.from(
-    new Set([process.env.SUPABASE_SCANS_LINK_COLUMN, "user_id", "id"].filter((value): value is string => Boolean(value)))
+    new Set(
+      [
+        process.env.SUPABASE_QUIZ_RESULTS_LINK_COLUMN,
+        "user_id",
+        "profile_id",
+        "id",
+        "email"
+      ].filter((value): value is string => Boolean(value))
+    )
   );
 
   let lastError: Error | null = null;
 
   for (const column of candidateColumns) {
-    const { data, error } = await supabase.from(table).select("*").in(column, profileIds);
+    const identifiers = Array.from(
+      new Set(
+        profileRows
+          .map((row) => getProfileLinkValue(row, column))
+          .filter((value): value is string => Boolean(value))
+      )
+    );
+
+    if (identifiers.length === 0) {
+      continue;
+    }
+
+    const { data, error } = await supabase.from(table).select("*").in(column, identifiers);
 
     if (!error) {
-      return buildScanRowMap((data ?? []) as Record<string, unknown>[], column);
+      return {
+        map: buildLatestRowMap((data ?? []) as Record<string, unknown>[], column),
+        linkColumn: column
+      };
     }
 
     if (!isMissingColumnError(error.message)) {
-      throw new Error(`Supabase skin_scans fetch failed: ${error.message}`);
+      throw new Error(`Supabase quiz_results fetch failed: ${error.message}`);
     }
 
     lastError = new Error(error.message);
@@ -273,97 +221,54 @@ async function fetchScanRowMap(profileIds: string[]) {
 
   if (lastError) {
     throw new Error(
-      `Supabase skin_scans mapping failed. Tried link columns ${candidateColumns.join(", ")} but none worked.`
+      `Supabase quiz_results mapping failed. Tried link columns ${candidateColumns.join(", ")} but none worked.`
     );
   }
 
-  return new Map<string, Record<string, unknown>>();
-}
-
-async function fetchBucketScanBundle(profileId: string): Promise<OrderedScanBundle | null> {
-  const bucket = getStorageBucketName();
-
-  if (!bucket) {
-    return null;
-  }
-
-  const supabase = getSupabaseAdminClient();
-  const { data, error } = await supabase.storage.from(bucket).list(profileId, {
-    limit: 20,
-    sortBy: { column: "name", order: "asc" }
-  });
-
-  if (error) {
-    throw new Error(`Supabase storage scan lookup failed: ${error.message}`);
-  }
-
-  const filePaths = (data ?? [])
-    .map((item) => readString(item.name))
-    .filter((value): value is string => Boolean(value))
-    .filter((value) => /\.(png|jpe?g|webp|heic)$/i.test(value))
-    .map((value) => `${profileId}/${value}`);
-
-  if (filePaths.length === 0) {
-    return null;
-  }
-
-  const front = filePaths.filter((value) => value.toLowerCase().includes("front"));
-  const left = filePaths.filter((value) => value.toLowerCase().includes("left"));
-  const right = filePaths.filter((value) => value.toLowerCase().includes("right"));
-  const orderedScanUrls = Array.from(new Set(orderScanReferences([...front, ...left, ...right, ...filePaths])));
-
   return {
-    front,
-    left,
-    right,
-    ordered_scan_urls: orderedScanUrls,
-    raw: {
-      source: "supabase-storage",
-      bucket,
-      folder: profileId,
-      files: filePaths
-    }
+    map: new Map<string, Record<string, unknown>>(),
+    linkColumn: null as string | null
   };
 }
 
-function mergeProfileRowWithScans(
+function mergeProfileRowWithQuizResult(
   profileRow: Record<string, unknown>,
-  scanRow: Record<string, unknown> | undefined,
-  bucketScanBundle?: OrderedScanBundle | null
+  quizRow: Record<string, unknown> | undefined
 ) {
-  const scanBundle = scanRow ? buildOrderedScanBundle(scanRow) : bucketScanBundle ?? null;
-
-  if (!scanBundle) {
+  if (!quizRow) {
     return profileRow;
   }
 
+  const scanBundle = buildQuizResultScanBundle(quizRow);
+
   return {
     ...profileRow,
+    gender: readString(quizRow.gender) ?? readString(profileRow.gender),
+    sex: readString(quizRow.gender) ?? readString(profileRow.sex),
+    answers: quizRow.answers ?? profileRow.answers,
+    skin_quiz: quizRow.answers ?? profileRow.skin_quiz,
+    image_url: scanBundle.front[0] ?? profileRow.image_url,
+    image_url_left: scanBundle.left[0] ?? profileRow.image_url_left,
+    image_url_right: scanBundle.right[0] ?? profileRow.image_url_right,
     scans: scanBundle,
-    skin_scans: scanRow ?? scanBundle.raw
+    quiz_results: quizRow
   };
 }
 
-async function enrichProfileRowsWithScans(rows: Record<string, unknown>[]) {
-  const profileIds = rows
-    .map((row) => readString(row.id))
-    .filter((value): value is string => Boolean(value));
-  const scanRowMap = await fetchScanRowMap(profileIds);
+async function enrichProfileRowsWithQuizResults(rows: Record<string, unknown>[]) {
+  const { map, linkColumn } = await fetchQuizResultMap(rows);
 
-  return Promise.all(
-    rows.map(async (row) => {
-      const profileId = readString(row.id);
-      const scanRow = profileId ? scanRowMap.get(profileId) : undefined;
-      const bucketScanBundle = profileId ? await fetchBucketScanBundle(profileId) : null;
+  return rows.map((row) => {
+    const key = linkColumn ? getProfileLinkValue(row, linkColumn) : null;
+    const quizRow = key ? map.get(key) : undefined;
 
-      return mergeProfileRowWithScans(row, scanRow, bucketScanBundle);
-    })
-  );
+    return mergeProfileRowWithQuizResult(row, quizRow);
+  });
 }
 
 async function upsertNormalizedProfile(row: Record<string, unknown>) {
   const normalized = normalizeSupabaseProfileRow(row, getProfilesTableName());
-  const scanUrls = await resolveScanUrls(normalized.scanReferences);
+  const scanUrls = Array.from(new Set(normalized.scanReferences));
 
   return prisma.syncedProfile.upsert({
     where: {
@@ -423,8 +328,24 @@ async function fetchSupabaseProfileRowsByIds(profileIds: string[]) {
   return (data ?? []) as Record<string, unknown>[];
 }
 
+async function fetchSupabaseProfileRowsByEmails(emails: string[]) {
+  if (emails.length === 0) {
+    return [];
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const table = getProfilesTableName();
+  const { data, error } = await supabase.from(table).select("*").in("email", emails);
+
+  if (error) {
+    throw new Error(`Supabase profile lookup failed: ${error.message}`);
+  }
+
+  return (data ?? []) as Record<string, unknown>[];
+}
+
 async function syncEnrichedProfileRows(rows: Record<string, unknown>[]) {
-  const enrichedRows = await enrichProfileRowsWithScans(rows);
+  const enrichedRows = await enrichProfileRowsWithQuizResults(rows);
   const synced = [];
 
   for (const row of enrichedRows) {
@@ -437,6 +358,18 @@ async function syncEnrichedProfileRows(rows: Record<string, unknown>[]) {
 export async function syncSupabaseProfileByExternalId(externalId: string) {
   const rows = await fetchSupabaseProfileRowsByIds([externalId]);
   const matchingRow = rows.find((row) => readString(row.id) === externalId);
+
+  if (!matchingRow) {
+    return null;
+  }
+
+  const [profile] = await syncEnrichedProfileRows([matchingRow]);
+  return profile ?? null;
+}
+
+export async function syncSupabaseProfileByEmail(email: string) {
+  const rows = await fetchSupabaseProfileRowsByEmails([email]);
+  const matchingRow = rows.find((row) => readString(row.email) === email);
 
   if (!matchingRow) {
     return null;
@@ -484,7 +417,32 @@ export async function getSyncedProfileById(id: string) {
 }
 
 export async function ingestSupabaseWebhookRow(row: Record<string, unknown>) {
-  const [enrichedRow] = await enrichProfileRowsWithScans([row]);
+  const looksLikeQuizResult = ["answers", "image_url", "image_url_left", "image_url_right", "gender"].some(
+    (key) => key in row
+  );
+
+  if (looksLikeQuizResult) {
+    const profileId = readString(row.user_id) ?? readString(row.profile_id) ?? readString(row.id);
+    const email = readString(row.email);
+
+    if (profileId) {
+      const syncedProfile = await syncSupabaseProfileByExternalId(profileId);
+      if (syncedProfile) {
+        return syncedProfile;
+      }
+    }
+
+    if (email) {
+      const syncedProfile = await syncSupabaseProfileByEmail(email);
+      if (syncedProfile) {
+        return syncedProfile;
+      }
+    }
+
+    throw new Error("Could not find matching users row for quiz_results webhook payload");
+  }
+
+  const [enrichedRow] = await enrichProfileRowsWithQuizResults([row]);
   const record = await upsertNormalizedProfile(enrichedRow ?? row);
   return serializeSyncedProfile(record);
 }

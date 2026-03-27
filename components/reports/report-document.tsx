@@ -1,4 +1,5 @@
 import { formatDate } from "@/lib/utils";
+import { getActiveScorePoint, getSkinScoreSummary } from "@/lib/report/score";
 import type { ReportDetailDto, RoutineItem } from "@/lib/report/types";
 
 function Placeholder({ text }: { text: string }) {
@@ -51,11 +52,34 @@ function renderStringList(items: string[], emptyText: string) {
   );
 }
 
+function renderVerifiedStamp(report: ReportDetailDto) {
+  if (!["approved", "sent_to_user"].includes(report.status)) {
+    return null;
+  }
+
+  return (
+    <div className="verified-stamp">
+      <div className="verified-stamp-title">Doctor Verified</div>
+      <div className="verified-stamp-subtitle">
+        {report.approvedBy?.name ? `Approved by ${report.approvedBy.name}` : "Approved report"}
+      </div>
+      <div className="verified-stamp-date">
+        {report.approvedAt ? formatDate(report.approvedAt) : formatDate(report.updatedAt)}
+      </div>
+    </div>
+  );
+}
+
 export function ReportDocument({ report }: { report: ReportDetailDto }) {
+  const activeScorePoint = getActiveScorePoint(report.analysisOutput.skinScore);
+
   return (
     <div className="report-root">
       <section className="report-page">
-        <h1 className="title">Skin Analysis Report</h1>
+        <div className="title-wrap">
+          <h1 className="title">Skin Analysis Report</h1>
+          {renderVerifiedStamp(report)}
+        </div>
 
         <div className="top-grid">
           <div className="pill">
@@ -95,14 +119,14 @@ export function ReportDocument({ report }: { report: ReportDetailDto }) {
         </div>
 
         <div className="score-wrap">
-          <div className="score-label">Your Skin Score</div>
+          <div className="score-label">{getSkinScoreSummary(report.analysisOutput.skinScore)}</div>
           <div className="score-line">
             {Array.from({ length: 10 }, (_, index) => {
               const value = index + 1;
 
               return (
                 <div
-                  className={`score-point ${value === report.analysisOutput.skinScore ? "active" : ""}`}
+                  className={`score-point ${value === activeScorePoint ? "active" : ""}`}
                   key={value}
                 >
                   <span>{value}</span>
@@ -111,10 +135,11 @@ export function ReportDocument({ report }: { report: ReportDetailDto }) {
             })}
           </div>
           <div className="score-bands">
-            <div className="needs">Needs Attention</div>
-            <div className="moderate">Moderate Concerns</div>
-            <div className="improvement">Good, Needs Improvement</div>
-            <div className="healthy">Healthy Skin</div>
+            <div className="severe">Severe</div>
+            <div className="concerning">Concerning</div>
+            <div className="moderate">Moderate</div>
+            <div className="good">Good</div>
+            <div className="excellent">Excellent</div>
           </div>
         </div>
 

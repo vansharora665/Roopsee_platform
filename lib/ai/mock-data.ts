@@ -19,8 +19,8 @@ export const mockAnalysisInput = {
 
 export const mockAnalysisOutput: AnalysisOutput = {
   skin_score: {
-    score: 6,
-    label: "Good, Needs Improvement"
+    score: 6.4,
+    label: "Moderate (Needs improvement)"
   },
   overall_skin_profile: {
     skin_type: "Combination",

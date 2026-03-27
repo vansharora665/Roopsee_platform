@@ -54,12 +54,7 @@ function stringArray(value: unknown): string[] {
 }
 
 function looksLikeScanReference(value: string) {
-  return (
-    /^https?:\/\//i.test(value) ||
-    /\.(png|jpe?g|webp|heic)$/i.test(value) ||
-    value.includes("/") ||
-    value.includes("storage")
-  );
+  return /^https?:\/\//i.test(value) || /\.(png|jpe?g|webp|heic)$/i.test(value) || value.includes("/");
 }
 
 export function extractScanStrings(input: unknown): string[] {
@@ -96,8 +91,6 @@ function buildProfileSummary(args: {
   quizSummaryJson: string[];
   skinType: string | null;
   skinConcerns: string[];
-  phone: string | null;
-  email: string | null;
 }) {
   const sections = [...args.quizSummaryJson];
 
@@ -109,15 +102,39 @@ function buildProfileSummary(args: {
     sections.unshift(`Skin concerns: ${args.skinConcerns.join(", ")}`);
   }
 
-  if (args.phone) {
-    sections.push(`Phone: ${args.phone}`);
-  }
-
-  if (args.email) {
-    sections.push(`Email: ${args.email}`);
-  }
-
   return sections.join("\n");
+}
+
+function buildScanJson(row: Record<string, unknown>, nestedProfile: Record<string, unknown>) {
+  const directScans = firstDefined(
+    row.scans,
+    row.scan_urls,
+    row.images,
+    row.image_urls,
+    row.scan_assets,
+    row.photos,
+    nestedProfile.scans,
+    nestedProfile.images
+  );
+
+  if (directScans) {
+    return directScans;
+  }
+
+  const front = toStringValue(firstDefined(row.image_url, row.front, row.front_image_url));
+  const left = toStringValue(firstDefined(row.image_url_left, row.left, row.left_image_url));
+  const right = toStringValue(firstDefined(row.image_url_right, row.right, row.right_image_url));
+
+  if (!front && !left && !right) {
+    return null;
+  }
+
+  return {
+    front,
+    left,
+    right,
+    ordered_scan_urls: [front, left, right].filter((value): value is string => Boolean(value))
+  };
 }
 
 export type NormalizedSupabaseProfile = {
@@ -143,30 +160,24 @@ export function normalizeSupabaseProfileRow(
   sourceTable: string
 ): NormalizedSupabaseProfile {
   const nestedProfile = asRecord(firstDefined(row.profile, row.profile_data, row.user_data, row.metadata));
-  const skinQuiz = asRecord(firstDefined(row.skin_quiz, nestedProfile.skin_quiz));
-  const skinQuizAnswers = firstDefined(skinQuiz.answers, skinQuiz.answer_map, skinQuiz.responses, skinQuiz);
-  const skinType = toStringValue(firstDefined(row.skin_type, nestedProfile.skin_type, skinQuiz.skin_type));
-  const skinConcerns = stringArray(firstDefined(row.skin_concerns, nestedProfile.skin_concerns, skinQuiz.skin_concerns));
-  const quizJson = firstDefined(
+  const skinQuiz = asRecord(firstDefined(row.skin_quiz, row.quiz_results, nestedProfile.skin_quiz));
+  const skinQuizAnswers = firstDefined(
+    row.answers,
+    skinQuiz.answers,
+    skinQuiz.answer_map,
+    skinQuiz.responses,
     row.quiz_answers,
     row.quiz_json,
     row.questionnaire_json,
     row.quizAnswers,
-    skinQuizAnswers,
     row.skin_quiz,
     nestedProfile.quiz_answers,
     nestedProfile.quiz_json
   );
-  const scansJson = firstDefined(
-    row.scans,
-    row.scan_urls,
-    row.images,
-    row.image_urls,
-    row.scan_assets,
-    row.photos,
-    nestedProfile.scans,
-    nestedProfile.images
-  );
+  const skinType = toStringValue(firstDefined(row.skin_type, nestedProfile.skin_type, skinQuiz.skin_type));
+  const skinConcerns = stringArray(firstDefined(row.skin_concerns, nestedProfile.skin_concerns, skinQuiz.skin_concerns));
+  const quizJson = skinQuizAnswers;
+  const scansJson = buildScanJson(row, nestedProfile);
   const externalId =
     toStringValue(firstDefined(row.id, row.user_id, row.profile_id, nestedProfile.id, nestedProfile.user_id)) ??
     crypto.randomUUID();
@@ -196,7 +207,10 @@ export function normalizeSupabaseProfileRow(
       ...row,
       skin_type: skinType,
       skin_concerns: skinConcerns,
-      phone_no: phone
+      phone_no: phone,
+      gender: sex,
+      answers: quizJson,
+      scans: scansJson
     },
     quizJson,
     quizSummaryJson,
@@ -204,9 +218,7 @@ export function normalizeSupabaseProfileRow(
     profileSummary: buildProfileSummary({
       quizSummaryJson,
       skinType,
-      skinConcerns,
-      phone,
-      email
+      skinConcerns
     }),
     sourceCreatedAt: toStringValue(firstDefined(row.created_at, nestedProfile.created_at))
       ? new Date(String(firstDefined(row.created_at, nestedProfile.created_at)))

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useFieldArray, useForm } from "react-hook-form";
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { DEFAULT_USAGE_AMOUNTS, DO_THIS_OPTIONS, NOT_THAT_OPTIONS } from "@/lib/report/default-guidance";
 import type { ReportDetailDto } from "@/lib/report/types";
 
 type ListItem = {
@@ -35,8 +36,8 @@ type DoctorReviewFormValues = {
   repairSerumProductName: string;
   morningRoutine: RoutineItem[];
   nightRoutine: RoutineItem[];
-  doThisItems: ListItem[];
-  notThatItems: ListItem[];
+  doThisSelections: string[];
+  notThatSelections: string[];
   expertTipItems: ListItem[];
   doctorNotes: string;
 };
@@ -99,6 +100,63 @@ function FieldArrayHeader({
   );
 }
 
+function SelectionDropdown({
+  title,
+  description,
+  options,
+  selectedValues,
+  onToggle
+}: {
+  title: string;
+  description: string;
+  options: readonly string[];
+  selectedValues: string[];
+  onToggle: (value: string) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <p className="text-sm font-semibold text-slate-900">{title}</p>
+        <p className="mt-1 text-sm text-slate-600">{description}</p>
+      </div>
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+        <Button type="button" variant="secondary" className="w-full justify-between" onClick={() => setIsOpen((open) => !open)}>
+          <span>{isOpen ? "Hide options" : "Select items"}</span>
+          <span>{selectedValues.length} selected</span>
+        </Button>
+        {isOpen ? (
+          <div className="mt-3 max-h-72 space-y-2 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3">
+            {options.map((option) => {
+              const checked = selectedValues.includes(option);
+
+              return (
+                <label key={option} className="flex cursor-pointer items-start gap-3 rounded-2xl px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 rounded border-slate-300 text-brand-blue focus:ring-brand-blue"
+                    checked={checked}
+                    onChange={() => onToggle(option)}
+                  />
+                  <span>{option}</span>
+                </label>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {selectedValues.length > 0 ? selectedValues.map((value) => (
+          <span key={value} className="rounded-full bg-brand-blue/10 px-3 py-1 text-xs font-semibold text-brand-navy">
+            {value}
+          </span>
+        )) : <p className="text-sm text-slate-500">No items selected yet.</p>}
+      </div>
+    </div>
+  );
+}
+
 export function DoctorReviewForm({ report }: { report: ReportDetailDto }) {
   const router = useRouter();
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -125,8 +183,8 @@ export function DoctorReviewForm({ report }: { report: ReportDetailDto }) {
       nightRoutine: report.doctorReview.nightRoutine.length
         ? report.doctorReview.nightRoutine
         : [{ step: "", usageAmount: "" }],
-      doThisItems: asListItems(report.doctorReview.doThis),
-      notThatItems: asListItems(report.doctorReview.notThat),
+      doThisSelections: report.doctorReview.doThis,
+      notThatSelections: report.doctorReview.notThat,
       expertTipItems: asListItems(report.doctorReview.expertTips),
       doctorNotes: report.doctorReview.doctorNotes ?? ""
     }
@@ -134,9 +192,30 @@ export function DoctorReviewForm({ report }: { report: ReportDetailDto }) {
 
   const morningRoutine = useFieldArray({ control: form.control, name: "morningRoutine" });
   const nightRoutine = useFieldArray({ control: form.control, name: "nightRoutine" });
-  const doThisItems = useFieldArray({ control: form.control, name: "doThisItems" });
-  const notThatItems = useFieldArray({ control: form.control, name: "notThatItems" });
   const expertTipItems = useFieldArray({ control: form.control, name: "expertTipItems" });
+
+  const doThisSelections = form.watch("doThisSelections");
+  const notThatSelections = form.watch("notThatSelections");
+
+  const quantityGuidance = useMemo(
+    () => [
+      `Facewash / cleanser: ${DEFAULT_USAGE_AMOUNTS.cleanser}`,
+      `Sunscreen: ${DEFAULT_USAGE_AMOUNTS.sunscreen}`,
+      `Moisturizer: ${DEFAULT_USAGE_AMOUNTS.moisturizer}`,
+      `Repair or active cream: ${DEFAULT_USAGE_AMOUNTS.repairCream}`,
+      `Serum: ${DEFAULT_USAGE_AMOUNTS.serum}`
+    ],
+    []
+  );
+
+  function toggleSelection(name: "doThisSelections" | "notThatSelections", value: string) {
+    const currentValues = form.getValues(name);
+    const nextValues = currentValues.includes(value)
+      ? currentValues.filter((item) => item !== value)
+      : [...currentValues, value];
+
+    form.setValue(name, nextValues, { shouldDirty: true });
+  }
 
   function buildPayload(values: DoctorReviewFormValues) {
     return {
@@ -154,8 +233,8 @@ export function DoctorReviewForm({ report }: { report: ReportDetailDto }) {
       repairSerumProductName: values.repairSerumProductName || null,
       morningRoutine: values.morningRoutine.filter((item) => item.step.trim() && item.usageAmount.trim()),
       nightRoutine: values.nightRoutine.filter((item) => item.step.trim() && item.usageAmount.trim()),
-      doThis: values.doThisItems.map((item) => item.value.trim()).filter(Boolean),
-      notThat: values.notThatItems.map((item) => item.value.trim()).filter(Boolean),
+      doThis: Array.from(new Set(values.doThisSelections.map((item) => item.trim()).filter(Boolean))),
+      notThat: Array.from(new Set(values.notThatSelections.map((item) => item.trim()).filter(Boolean))),
       expertTips: values.expertTipItems.map((item) => item.value.trim()).filter(Boolean),
       doctorNotes: values.doctorNotes.trim() || null
     };
@@ -203,8 +282,8 @@ export function DoctorReviewForm({ report }: { report: ReportDetailDto }) {
           </p>
           <h2 className="text-2xl font-semibold text-slate-900">Editable review fields</h2>
           <p className="mt-2 max-w-3xl text-sm text-slate-600">
-            GPT-generated analysis stays read-only here. Product choices, routines, tips, and
-            delivery actions are handled separately by the doctor.
+            GPT-generated analysis stays read-only here. Product choices, routines, preset guidance,
+            and delivery actions are finalized separately by the doctor.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -241,13 +320,13 @@ export function DoctorReviewForm({ report }: { report: ReportDetailDto }) {
             </div>
             <div className="md:col-span-2">
               <p className="text-sm text-slate-500">Questionnaire</p>
-              <p className="text-sm text-slate-700">
+              <p className="text-sm text-slate-700 whitespace-pre-wrap">
                 {report.assets.questionnaireText || "No questionnaire notes added"}
               </p>
             </div>
             <div className="md:col-span-2">
               <p className="text-sm text-slate-500">Manual findings</p>
-              <p className="text-sm text-slate-700">
+              <p className="text-sm text-slate-700 whitespace-pre-wrap">
                 {report.assets.rawFindingsText || "No manual findings added"}
               </p>
             </div>
@@ -305,7 +384,7 @@ export function DoctorReviewForm({ report }: { report: ReportDetailDto }) {
                     throw new Error("Could not approve report");
                   }
 
-                  setStatusMessage("Report approved and products synced to Supabase.");
+                  setStatusMessage("Report approved, stamped as doctor verified, and synced to Supabase.");
                 })
               }
               disabled={busyAction !== null}
@@ -385,6 +464,22 @@ export function DoctorReviewForm({ report }: { report: ReportDetailDto }) {
           ))}
         </section>
 
+        <Card className="space-y-4 border border-slate-200 shadow-none">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">Suggested quantity guidance</h3>
+            <p className="mt-1 text-sm text-slate-600">
+              Use these standard quantities unless the doctor wants to override them in the routine.
+            </p>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            {quantityGuidance.map((item) => (
+              <div key={item} className="rounded-2xl bg-slate-50 p-3 text-sm font-medium text-slate-700">
+                {item}
+              </div>
+            ))}
+          </div>
+        </Card>
+
         <section className="grid gap-4 xl:grid-cols-2">
           <Card className="border border-slate-200 shadow-none">
             <FieldArrayHeader
@@ -439,33 +534,47 @@ export function DoctorReviewForm({ report }: { report: ReportDetailDto }) {
           </Card>
         </section>
 
-        <section className="grid gap-4 xl:grid-cols-3">
-          {[
-            ["Do This", doThisItems, "doThisItems"] as const,
-            ["Not That", notThatItems, "notThatItems"] as const,
-            ["Expert Tips", expertTipItems, "expertTipItems"] as const
-          ].map(([title, fieldArray, name]) => (
-            <Card className="border border-slate-200 shadow-none" key={title}>
-              <FieldArrayHeader
-                label={title}
-                onAdd={() => fieldArray.append({ value: "" })}
-              />
-              <div className="space-y-3">
-                {fieldArray.fields.map((field, index) => (
-                  <div className="grid gap-3 md:grid-cols-[1fr_auto]" key={field.id}>
-                    <Input
-                      {...form.register(`${name}.${index}.value` as const)}
-                      placeholder={`${title} item`}
-                    />
-                    <Button type="button" variant="ghost" onClick={() => fieldArray.remove(index)}>
-                      Remove
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          ))}
+        <section className="grid gap-4 xl:grid-cols-2">
+          <Card className="border border-slate-200 shadow-none">
+            <SelectionDropdown
+              title="Do This"
+              description="Select the care instructions that should appear automatically in the final report."
+              options={DO_THIS_OPTIONS}
+              selectedValues={doThisSelections}
+              onToggle={(value) => toggleSelection("doThisSelections", value)}
+            />
+          </Card>
+
+          <Card className="border border-slate-200 shadow-none">
+            <SelectionDropdown
+              title="Not That"
+              description="Select the warnings and avoid-list items that should appear automatically in the final report."
+              options={NOT_THAT_OPTIONS}
+              selectedValues={notThatSelections}
+              onToggle={(value) => toggleSelection("notThatSelections", value)}
+            />
+          </Card>
         </section>
+
+        <Card className="border border-slate-200 shadow-none">
+          <FieldArrayHeader
+            label="Expert tips"
+            onAdd={() => expertTipItems.append({ value: "" })}
+          />
+          <div className="space-y-3">
+            {expertTipItems.fields.map((field, index) => (
+              <div className="grid gap-3 md:grid-cols-[1fr_auto]" key={field.id}>
+                <Input
+                  {...form.register(`expertTipItems.${index}.value` as const)}
+                  placeholder="Doctor expert tip"
+                />
+                <Button type="button" variant="ghost" onClick={() => expertTipItems.remove(index)}>
+                  Remove
+                </Button>
+              </div>
+            ))}
+          </div>
+        </Card>
 
         <Card className="space-y-3 border border-slate-200 shadow-none">
           <h3 className="text-lg font-semibold text-slate-900">Doctor notes</h3>

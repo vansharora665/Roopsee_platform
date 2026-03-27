@@ -71,7 +71,8 @@ Optional Supabase tuning:
 
 - `SUPABASE_PROFILES_TABLE` default `profiles`
 - `SUPABASE_PROFILES_UPDATED_AT_COLUMN` default `updated_at`
-- `SUPABASE_STORAGE_BUCKET` for turning storage paths into usable public URLs
+- `SUPABASE_QUIZ_RESULTS_TABLE` and `SUPABASE_QUIZ_RESULTS_LINK_COLUMN` for pulling gender, quiz answers, and image URLs from `quiz_results`
+- `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` for draft/approval bot notifications
 
 Optional product import helper:
 
@@ -113,8 +114,10 @@ Use a provider that runs a long-lived Node container and supports a persistent d
        SUPABASE_SERVICE_ROLE_KEY=<your Supabase service role key>
        SUPABASE_PROFILES_TABLE=users
        SUPABASE_PROFILES_UPDATED_AT_COLUMN=updated_at
-       SUPABASE_SCANS_TABLE=skin_scans
-       SUPABASE_STORAGE_BUCKET=skin-scans
+       SUPABASE_QUIZ_RESULTS_TABLE=quiz_results
+       SUPABASE_QUIZ_RESULTS_LINK_COLUMN=user_id
+       TELEGRAM_BOT_TOKEN=your_bot_token
+       TELEGRAM_CHAT_ID=your_chat_id
        APP_URL=<your Railway public URL>
        FILE_STORAGE_ROOT=/data
        PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium

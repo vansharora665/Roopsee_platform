@@ -134,7 +134,7 @@ model AnalysisOutput {
   id                   String   @id @default(cuid())
   reportId             String   @unique
   report               Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
-  skinScore            Int
+  skinScore            Float
   skinScoreLabel       String
   skinType             String
   condition            String

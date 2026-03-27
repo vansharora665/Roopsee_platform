@@ -4,7 +4,10 @@ import type { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
 import { generateValidatedAnalysis } from "@/lib/ai/provider";
+import { sendTelegramMessage } from "@/lib/notifications/telegram";
 import { getCurrentUser } from "@/lib/auth";
+import { DEFAULT_USAGE_AMOUNTS } from "@/lib/report/default-guidance";
+import { getSkinScoreLabel, normalizeSkinScore } from "@/lib/report/score";
 import {
   formatProductCatalogForPrompt,
   rankProductsForDraft,
@@ -74,34 +77,34 @@ function buildDraftFromAnalysis(analysis: AnalysisOutput): ReportDraft {
       morning: [
         {
           step: "Cleanser",
-          usage_amount: "1 pump",
+          usage_amount: DEFAULT_USAGE_AMOUNTS.cleanser,
           why: "Remove overnight oil and residue gently."
         },
         {
           step: "Moisturizer",
-          usage_amount: "1 fingertip unit",
+          usage_amount: DEFAULT_USAGE_AMOUNTS.moisturizer,
           why: "Support hydration and comfort through the day."
         },
         {
           step: "Sunscreen",
-          usage_amount: "2 finger lengths",
+          usage_amount: DEFAULT_USAGE_AMOUNTS.sunscreen,
           why: "Protect against UV-triggered worsening of skin concerns."
         }
       ],
       night: [
         {
           step: "Cleanser",
-          usage_amount: "1 pump",
+          usage_amount: DEFAULT_USAGE_AMOUNTS.cleanser,
           why: "Prepare the skin for treatment products."
         },
         {
           step: "Repair serum",
-          usage_amount: "2-3 drops",
+          usage_amount: DEFAULT_USAGE_AMOUNTS.serum,
           why: `Address ${mainConcern.toLowerCase()} with a targeted active.`
         },
         {
           step: "Moisturizer",
-          usage_amount: "1 fingertip unit",
+          usage_amount: DEFAULT_USAGE_AMOUNTS.moisturizer,
           why: "Reduce dryness and support tolerance."
         }
       ]
@@ -115,6 +118,21 @@ function buildDraftFromAnalysis(analysis: AnalysisOutput): ReportDraft {
     doctor_handoff: {
       summary: "Review the suggested ingredient stack, routine frequency, and product fit before approval.",
       review_focus: ["Tolerance", "Practical adherence", "Contraindications"]
+    }
+  };
+}
+
+function normalizeDraftScore(draft: ReportDraft): ReportDraft {
+  const normalizedScore = normalizeSkinScore(draft.analysis.skin_score.score);
+
+  return {
+    ...draft,
+    analysis: {
+      ...draft.analysis,
+      skin_score: {
+        score: normalizedScore,
+        label: getSkinScoreLabel(normalizedScore)
+      }
     }
   };
 }
@@ -264,7 +282,7 @@ async function resolveReportInput(input: CreateReportInputDto) {
 async function buildDraftAndSource(input: CreateReportInputDto, promptText: string) {
   if (input.reportDraftOverride) {
     return {
-      draft: input.reportDraftOverride,
+      draft: normalizeDraftScore(input.reportDraftOverride),
       rawResponseText: JSON.stringify(input.reportDraftOverride, null, 2),
       provider: "manual-import",
       promptText
@@ -272,7 +290,7 @@ async function buildDraftAndSource(input: CreateReportInputDto, promptText: stri
   }
 
   if (input.analysisOverride) {
-    const draft = buildDraftFromAnalysis(input.analysisOverride);
+    const draft = normalizeDraftScore(buildDraftFromAnalysis(input.analysisOverride));
     return {
       draft,
       rawResponseText: JSON.stringify(draft, null, 2),
@@ -282,7 +300,7 @@ async function buildDraftAndSource(input: CreateReportInputDto, promptText: stri
   }
 
   const analysisResult = await generateValidatedAnalysis(input);
-  const draft = buildDraftFromAnalysis(analysisResult.analysis);
+  const draft = normalizeDraftScore(buildDraftFromAnalysis(analysisResult.analysis));
 
   return {
     draft,
@@ -439,7 +457,10 @@ export async function createReport(input: CreateReportInputDto): Promise<ReportD
     include: reportInclude
   });
 
-  return serializeReport(record);
+  const serializedReport = serializeReport(record);
+  await sendTelegramMessage(`draft for ${serializedReport.patientInfo.name} report is generated`);
+
+  return serializedReport;
 }
 
 export async function listReports(status?: ReportStatusDto): Promise<ReportListItemDto[]> {
@@ -646,6 +667,7 @@ export async function approveReport(reportId: string) {
 
   const serializedReport = serializeReport(report);
   await syncApprovedProductsToSupabase(serializedReport);
+  await sendTelegramMessage(`doctor has approved ${serializedReport.patientInfo.name} report`);
 
   return serializedReport;
 }

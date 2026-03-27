@@ -1,6 +1,7 @@
 import { apiResponse, handleApiError } from "@/lib/api";
 import {
   ingestSupabaseWebhookRow,
+  syncSupabaseProfileByEmail,
   syncSupabaseProfileByExternalId
 } from "@/lib/supabase/profile-service";
 
@@ -13,8 +14,8 @@ function readString(value: unknown) {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function looksLikeSkinScansRow(row: Record<string, unknown>) {
-  return ["front", "left", "right", "front_url", "left_url", "right_url"].some((key) => key in row);
+function looksLikeQuizResultsRow(row: Record<string, unknown>) {
+  return ["answers", "image_url", "image_url_left", "image_url_right", "gender"].some((key) => key in row);
 }
 
 export async function POST(request: Request) {
@@ -33,25 +34,31 @@ export async function POST(request: Request) {
 
     const record = row as Record<string, unknown>;
     const table = readString(body.table);
-    const profileIdFromUser = readString(record.id);
-    const profileIdFromScan = readString(record.user_id) ?? profileIdFromUser;
+    const profileId = readString(record.user_id) ?? readString(record.profile_id) ?? readString(record.id);
+    const email = readString(record.email);
 
-    if (table === "skin_scans" || looksLikeSkinScansRow(record)) {
-      if (!profileIdFromScan) {
-        throw new Error("skin_scans webhook payload must include user_id or id");
+    if (table === "quiz_results" || looksLikeQuizResultsRow(record)) {
+      if (profileId) {
+        const syncedProfile = await syncSupabaseProfileByExternalId(profileId);
+
+        if (syncedProfile) {
+          return apiResponse(syncedProfile);
+        }
       }
 
-      const syncedProfile = await syncSupabaseProfileByExternalId(profileIdFromScan);
+      if (email) {
+        const syncedProfile = await syncSupabaseProfileByEmail(email);
 
-      if (!syncedProfile) {
-        throw new Error(`Could not find matching users row for scan profile ${profileIdFromScan}`);
+        if (syncedProfile) {
+          return apiResponse(syncedProfile);
+        }
       }
 
-      return apiResponse(syncedProfile);
+      throw new Error("quiz_results webhook payload must include a user link that matches the users table");
     }
 
-    if (profileIdFromUser) {
-      const syncedProfile = await syncSupabaseProfileByExternalId(profileIdFromUser);
+    if (profileId) {
+      const syncedProfile = await syncSupabaseProfileByExternalId(profileId);
 
       if (syncedProfile) {
         return apiResponse(syncedProfile);
