@@ -30,6 +30,33 @@ function toStringValue(value: unknown) {
   return null;
 }
 
+function normalizeGenderValue(value: unknown) {
+  const normalized = toStringValue(value);
+
+  if (!normalized) {
+    return null;
+  }
+
+  const compact = normalized.trim().toLowerCase();
+
+  switch (compact) {
+    case "male":
+    case "m":
+      return "Male";
+    case "female":
+    case "f":
+      return "Female";
+    case "non-binary":
+    case "non binary":
+    case "nonbinary":
+      return "Non-binary";
+    case "prefer not to say":
+      return "Prefer not to say";
+    default:
+      return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+  }
+}
+
 function stringArray(value: unknown): string[] {
   if (typeof value === "string") {
     return value
@@ -126,7 +153,7 @@ export function normalizeSupabaseProfileRow(
   const email = toStringValue(row.email);
   const phone = toStringValue(row.phone_no);
   const age = toNumber(row.age);
-  const sex = toStringValue(row.gender) ?? toStringValue(row.sex);
+  const sex = normalizeGenderValue(row.gender);
   const skinType = toStringValue(row.skin_type);
   const skinConcerns = stringArray(row.skin_concerns);
   const quizJson = row.answers ?? null;
