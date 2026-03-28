@@ -1,6 +1,9 @@
 import { NewReportForm } from "@/components/reports/new-report-form";
 import { syncSupabaseProfiles } from "@/lib/supabase/profile-service";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function NewReportPage() {
   const profiles = await syncSupabaseProfiles(100).catch(() => []);
 

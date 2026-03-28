@@ -1,6 +1,9 @@
 import { apiResponse, handleApiError } from "@/lib/api";
 import { syncSupabaseProfiles } from "@/lib/supabase/profile-service";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET() {
   try {
     return apiResponse(await syncSupabaseProfiles(100));

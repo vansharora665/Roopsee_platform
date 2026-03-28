@@ -285,7 +285,9 @@ export function NewReportForm({ initialProfiles }: { initialProfiles: SyncedProf
   }
 
   async function refreshProfiles() {
-    const response = await fetch("/api/supabase/profiles");
+    const response = await fetch("/api/supabase/profiles", {
+      cache: "no-store"
+    });
 
     if (!response.ok) {
       throw new Error("Could not load synced profiles");
@@ -322,7 +324,17 @@ export function NewReportForm({ initialProfiles }: { initialProfiles: SyncedProf
         throw new Error(body.error ?? "Could not sync Supabase profiles");
       }
 
-      await refreshProfiles();
+      const body = (await response.json()) as { data: SyncedProfileDto[] };
+      setProfiles(body.data);
+
+      if (selectedProfileId.length > 0) {
+        const refreshedProfile = body.data.find((profile) => profile.id === selectedProfileId);
+
+        if (refreshedProfile) {
+          applyProfile(refreshedProfile.id);
+        }
+      }
+
       setStatusMessage("Latest profiles were pulled from Supabase.");
     } catch (syncError) {
       setError(syncError instanceof Error ? syncError.message : "Could not sync Supabase profiles");
