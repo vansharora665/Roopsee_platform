@@ -1,8 +1,8 @@
 import { NewReportForm } from "@/components/reports/new-report-form";
-import { listSyncedProfiles } from "@/lib/supabase/profile-service";
+import { syncSupabaseProfiles } from "@/lib/supabase/profile-service";
 
 export default async function NewReportPage() {
-  const profiles = await listSyncedProfiles().catch(() => []);
+  const profiles = await syncSupabaseProfiles(100).catch(() => []);
 
   return (
     <div className="space-y-6">

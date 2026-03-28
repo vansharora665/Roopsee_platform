@@ -1,9 +1,9 @@
 import { apiResponse, handleApiError } from "@/lib/api";
-import { listSyncedProfiles, syncSupabaseProfiles } from "@/lib/supabase/profile-service";
+import { syncSupabaseProfiles } from "@/lib/supabase/profile-service";
 
 export async function GET() {
   try {
-    return apiResponse(await listSyncedProfiles());
+    return apiResponse(await syncSupabaseProfiles(100));
   } catch (error) {
     return handleApiError(error);
   }
