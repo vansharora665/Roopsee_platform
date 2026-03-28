@@ -122,7 +122,6 @@ export function normalizeSupabaseProfileRow(
   row: Record<string, unknown>,
   sourceTable: string
 ): NormalizedSupabaseProfile {
-  const externalId = toStringValue(row.id) ?? crypto.randomUUID();
   const fullName = toStringValue(row.name);
   const email = toStringValue(row.email);
   const phone = toStringValue(row.phone_no);
@@ -133,6 +132,11 @@ export function normalizeSupabaseProfileRow(
   const quizJson = row.answers ?? null;
   const quizSummaryJson = summarizeQuizAnswers(quizJson);
   const scansJson = buildScanJson(row);
+  const externalId =
+    toStringValue(row.quiz_result_id) ??
+    toStringValue(row.user_id) ??
+    toStringValue(row.id) ??
+    crypto.randomUUID();
 
   return {
     externalId,
@@ -158,8 +162,16 @@ export function normalizeSupabaseProfileRow(
       skinType,
       skinConcerns
     }),
-    sourceCreatedAt: toStringValue(row.created_at) ? new Date(String(row.created_at)) : null,
-    sourceUpdatedAt: toStringValue(row.updated_at) ? new Date(String(row.updated_at)) : null,
+    sourceCreatedAt: toStringValue(row.completed_at)
+      ? new Date(String(row.completed_at))
+      : toStringValue(row.created_at)
+        ? new Date(String(row.created_at))
+        : null,
+    sourceUpdatedAt: toStringValue(row.completed_at)
+      ? new Date(String(row.completed_at))
+      : toStringValue(row.updated_at)
+        ? new Date(String(row.updated_at))
+        : null,
     scanReferences: Array.from(new Set(extractScanStrings(scansJson)))
   };
 }

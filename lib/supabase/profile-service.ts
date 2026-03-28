@@ -13,7 +13,7 @@ function getProfilesTableName() {
 }
 
 function getUpdatedAtColumn() {
-  return process.env.SUPABASE_PROFILES_UPDATED_AT_COLUMN ?? "updated_at";
+  return process.env.SUPABASE_PROFILES_UPDATED_AT_COLUMN ?? "completed_at";
 }
 
 async function purgeProfilesFromOtherSources() {
@@ -151,7 +151,7 @@ async function fetchSupabaseProfileRowsByIds(profileIds: string[]) {
 
   const supabase = getSupabaseAdminClient();
   const table = getProfilesTableName();
-  const { data, error } = await supabase.from(table).select("*").in("id", profileIds);
+  const { data, error } = await supabase.from(table).select("*").in("quiz_result_id", profileIds);
 
   if (error) {
     throw new Error(`Supabase profile lookup failed: ${error.message}`);
@@ -188,7 +188,7 @@ async function syncProfileRows(rows: Record<string, unknown>[]) {
 
 export async function syncSupabaseProfileByExternalId(externalId: string) {
   const rows = await fetchSupabaseProfileRowsByIds([externalId]);
-  const matchingRow = rows.find((row) => readString(row.id) === externalId);
+  const matchingRow = rows.find((row) => readString(row.quiz_result_id) === externalId || readString(row.user_id) === externalId || readString(row.id) === externalId);
 
   if (!matchingRow) {
     return null;
