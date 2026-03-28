@@ -16,8 +16,12 @@ function getUpdatedAtColumn() {
   return process.env.SUPABASE_PROFILES_UPDATED_AT_COLUMN ?? "completed_at";
 }
 
-function getProductsMatchColumn() {
-  return process.env.SUPABASE_PRODUCTS_MATCH_COLUMN ?? "quiz_result_id";
+function getUsersTableName() {
+  return process.env.SUPABASE_USERS_TABLE ?? "users";
+}
+
+function getUsersMatchColumn() {
+  return process.env.SUPABASE_USERS_MATCH_COLUMN ?? "id";
 }
 
 async function purgeProfilesFromOtherSources() {
@@ -275,17 +279,17 @@ export function extractStoredScanUrls(
 }
 
 export async function updateSupabaseUserProducts(args: {
-  externalId: string;
+  userId: string;
   products: ApprovedProductExport[];
 }) {
   const supabase = getSupabaseAdminClient();
-  const table = getProfilesTableName();
+  const table = getUsersTableName();
 
   const { data, error } = await supabase
     .from(table)
     .update({ products: args.products })
-    .eq(getProductsMatchColumn(), args.externalId)
-    .select(getProductsMatchColumn())
+    .eq(getUsersMatchColumn(), args.userId)
+    .select(getUsersMatchColumn())
     .maybeSingle();
 
   if (error) {
@@ -293,6 +297,6 @@ export async function updateSupabaseUserProducts(args: {
   }
 
   if (!data) {
-    throw new Error(`Supabase products update failed: no ${getProductsMatchColumn()} row matched ${args.externalId}`);
+    throw new Error(`Supabase products update failed: no ${getUsersMatchColumn()} row matched ${args.userId}`);
   }
 }

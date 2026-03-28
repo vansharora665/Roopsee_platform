@@ -209,13 +209,26 @@ function buildApprovedProductsPayload(report: ReportDetailDto) {
   });
 }
 
+function getSupabaseUserId(report: ReportDetailDto) {
+  if (!report.syncedProfile) {
+    return null;
+  }
+
+  const profileJson = report.syncedProfile.profileJson as Record<string, unknown>;
+  const userId = profileJson.user_id ?? profileJson.quiz_user_id;
+
+  return typeof userId === "string" && userId.trim().length > 0 ? userId : null;
+}
+
 async function syncApprovedProductsToSupabase(report: ReportDetailDto) {
-  if (!report.syncedProfile?.externalId) {
+  const userId = getSupabaseUserId(report);
+
+  if (!userId) {
     return;
   }
 
   await updateSupabaseUserProducts({
-    externalId: report.syncedProfile.externalId,
+    userId,
     products: buildApprovedProductsPayload(report)
   });
 }
