@@ -16,6 +16,10 @@ function getUpdatedAtColumn() {
   return process.env.SUPABASE_PROFILES_UPDATED_AT_COLUMN ?? "completed_at";
 }
 
+function getProductsMatchColumn() {
+  return process.env.SUPABASE_PRODUCTS_MATCH_COLUMN ?? "quiz_result_id";
+}
+
 async function purgeProfilesFromOtherSources() {
   await prisma.syncedProfile.deleteMany({
     where: {
@@ -277,12 +281,18 @@ export async function updateSupabaseUserProducts(args: {
   const supabase = getSupabaseAdminClient();
   const table = getProfilesTableName();
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from(table)
     .update({ products: args.products })
-    .eq("id", args.externalId);
+    .eq(getProductsMatchColumn(), args.externalId)
+    .select(getProductsMatchColumn())
+    .maybeSingle();
 
   if (error) {
     throw new Error(`Supabase products update failed: ${error.message}`);
+  }
+
+  if (!data) {
+    throw new Error(`Supabase products update failed: no ${getProductsMatchColumn()} row matched ${args.externalId}`);
   }
 }

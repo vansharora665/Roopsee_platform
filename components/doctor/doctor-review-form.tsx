@@ -507,7 +507,8 @@ export function DoctorReviewForm({ report }: { report: ReportDetailDto }) {
                   });
 
                   if (!response.ok) {
-                    throw new Error("Could not approve report");
+                    const body = (await response.json().catch(() => ({}))) as { error?: string };
+                    throw new Error(body.error ?? "Could not approve report");
                   }
 
                   setStatusMessage("Report approved, stamped as doctor verified, and synced to Supabase.");
