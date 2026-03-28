@@ -16,6 +16,17 @@ function getUpdatedAtColumn() {
   return process.env.SUPABASE_PROFILES_UPDATED_AT_COLUMN ?? "updated_at";
 }
 
+async function purgeProfilesFromOtherSources() {
+  await prisma.syncedProfile.deleteMany({
+    where: {
+      OR: [
+        { sourceTable: null },
+        { sourceTable: { not: getProfilesTableName() } }
+      ]
+    }
+  });
+}
+
 function readString(value: unknown) {
   if (typeof value !== "string") {
     return null;
@@ -213,12 +224,17 @@ export async function syncSupabaseProfiles(limit = 50) {
     throw new Error(`Supabase sync failed: ${error.message}`);
   }
 
+  await purgeProfilesFromOtherSources();
+
   const rawRows = (data ?? []) as Record<string, unknown>[];
   return syncProfileRows(rawRows);
 }
 
 export async function listSyncedProfiles() {
   const records = await prisma.syncedProfile.findMany({
+    where: {
+      sourceTable: getProfilesTableName()
+    },
     orderBy: [{ lastSyncedAt: "desc" }, { updatedAt: "desc" }],
     take: 100
   });
@@ -227,9 +243,10 @@ export async function listSyncedProfiles() {
 }
 
 export async function getSyncedProfileById(id: string) {
-  const record = await prisma.syncedProfile.findUnique({
+  const record = await prisma.syncedProfile.findFirst({
     where: {
-      id
+      id,
+      sourceTable: getProfilesTableName()
     }
   });
 
