@@ -1,4 +1,5 @@
 import { Card } from "@/components/ui/card";
+import { formatSkinScore, getSkinScoreSummary } from "@/lib/report/score";
 import type { ProductMatchDto, ReportDetailDto } from "@/lib/report/types";
 
 function SummaryList({ items, emptyLabel = "None noted" }: { items: string[]; emptyLabel?: string }) {
@@ -18,7 +19,7 @@ function SummaryList({ items, emptyLabel = "None noted" }: { items: string[]; em
 function slotTitle(slot: ProductMatchDto["slot"]) {
   switch (slot) {
     case "cleanser":
-      return "Cleanser";
+      return "Cleanser / Facewash";
     case "sunscreen":
       return "Sunscreen";
     case "moisturizer":
@@ -49,8 +50,8 @@ export function AnalysisSummary({ report }: { report: ReportDetailDto }) {
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-2xl bg-slate-50 p-4">
               <p className="text-sm text-slate-500">Skin score</p>
-              <p className="text-3xl font-bold text-brand-navy">{report.analysisOutput.skinScore}/10</p>
-              <p className="text-sm font-medium text-slate-600">{report.analysisOutput.skinScoreLabel}</p>
+              <p className="text-3xl font-bold text-brand-navy">{formatSkinScore(report.analysisOutput.skinScore)}/10</p>
+              <p className="text-sm font-medium text-slate-600">{getSkinScoreSummary(report.analysisOutput.skinScore)}</p>
             </div>
             <div className="rounded-2xl bg-slate-50 p-4">
               <p className="text-sm text-slate-500">Overall profile</p>
@@ -86,9 +87,9 @@ export function AnalysisSummary({ report }: { report: ReportDetailDto }) {
         <Card className="space-y-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-blue">
-              Read-only observations
+              Editable analysis context
             </p>
-            <h2 className="text-xl font-semibold text-slate-900">Model-owned fields</h2>
+            <h2 className="text-xl font-semibold text-slate-900">Doctor-adjustable predicted fields</h2>
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             {[

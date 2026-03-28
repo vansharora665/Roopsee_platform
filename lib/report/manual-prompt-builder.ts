@@ -1,3 +1,4 @@
+import { DEFAULT_USAGE_AMOUNTS } from "@/lib/report/default-guidance";
 import { summarizeQuizAnswers } from "@/lib/quiz/summary";
 import type { ReportDraft } from "@/lib/validators/draft";
 import type { PromptInputModeValue } from "@/lib/validators/report";
@@ -30,19 +31,19 @@ type PromptInput = {
 export const promptJsonShape: ReportDraft = {
   analysis: {
     skin_score: {
-      score: 6,
-      label: "Good, Needs Improvement"
+      score: 7.4,
+      label: "Good (Minor concerns)"
     },
     overall_skin_profile: {
       skin_type: "Combination",
-      condition: "Mild dehydration tendency with pigmentation",
+      condition: "Mild dehydration tendency with pigmentation and slight textural imbalance",
       overall_severity: "Mild"
     },
     key_skin_concerns: {
-      primary: ["Uneven skin tone", "Pigmentation"],
+      primary: ["Pigmentation", "Uneven tone"],
       secondary: ["Texture irregularity"]
     },
-    positive_findings: ["No active acne"],
+    positive_findings: ["No active inflammatory acne"],
     primary_observations: {
       oil_levels: "Medium",
       hydration: "Low",
@@ -52,62 +53,62 @@ export const promptJsonShape: ReportDraft = {
   },
   ingredient_plan: {
     cleanser: {
-      purpose: "Gentle cleanse without barrier disruption",
+      purpose: "Gentle cleansing without disrupting the barrier",
       hero_ingredients: ["Glycerin"],
       supporting_ingredients: ["Panthenol"],
-      notes: "Avoid stripping surfactants if sensitive"
+      notes: "Avoid stripping surfactants if sensitivity is suspected"
     },
     sunscreen: {
       purpose: "Daily UV protection and pigmentation prevention",
       hero_ingredients: ["Broad-spectrum UV filters"],
-      supporting_ingredients: ["Vitamin C"],
-      notes: "Prefer cosmetically elegant finish for daily wear"
+      supporting_ingredients: ["Vitamin E"],
+      notes: "Prioritize a finish the patient can wear daily"
     },
     moisturizer: {
-      purpose: "Restore hydration and barrier support",
+      purpose: "Restore hydration and support the barrier",
       hero_ingredients: ["Ceramides"],
       supporting_ingredients: ["Hyaluronic Acid"],
-      notes: "Match texture to skin type"
+      notes: "Match the weight of the formula to the skin type"
     },
     repair_serum: {
-      purpose: "Target the main concern with a hero treatment",
+      purpose: "Target the main concern with a corrective active",
       hero_ingredients: ["Niacinamide"],
       supporting_ingredients: ["Kojic Acid"],
-      notes: "Keep suitable for tolerance level"
+      notes: "Keep the treatment suitable for ongoing tolerance"
     }
   },
   routine_plan: {
     morning: [
       {
         step: "Cleanser",
-        usage_amount: "1 pump",
-        why: "Remove excess oil and residue gently"
+        usage_amount: DEFAULT_USAGE_AMOUNTS.cleanser,
+        why: "Remove overnight oil and residue gently"
       },
       {
         step: "Moisturizer",
-        usage_amount: "1 fingertip unit",
+        usage_amount: DEFAULT_USAGE_AMOUNTS.moisturizer,
         why: "Support hydration and barrier comfort"
       },
       {
         step: "Sunscreen",
-        usage_amount: "2 finger lengths",
-        why: "Protect from UV and pigmentation worsening"
+        usage_amount: DEFAULT_USAGE_AMOUNTS.sunscreen,
+        why: "Protect against UV-triggered worsening of pigmentation and acne marks"
       }
     ],
     night: [
       {
         step: "Cleanser",
-        usage_amount: "1 pump",
-        why: "Clean skin before treatment application"
+        usage_amount: DEFAULT_USAGE_AMOUNTS.cleanser,
+        why: "Prepare the skin for treatment products"
       },
       {
         step: "Repair serum",
-        usage_amount: "2-3 drops",
-        why: "Target the main skin concern"
+        usage_amount: DEFAULT_USAGE_AMOUNTS.serum,
+        why: "Target the main concern with a corrective active"
       },
       {
         step: "Moisturizer",
-        usage_amount: "1 fingertip unit",
+        usage_amount: DEFAULT_USAGE_AMOUNTS.moisturizer,
         why: "Seal hydration and reduce irritation risk"
       }
     ]
@@ -116,11 +117,11 @@ export const promptJsonShape: ReportDraft = {
     target_concerns: ["Pigmentation", "Uneven tone"],
     avoid_ingredients: ["Fragrance"],
     preferred_textures: ["Gel", "Lotion"],
-    notes: "Prioritize face products with high suitability"
+    notes: "Prioritize face products with high suitability for the drafted ingredients"
   },
   doctor_handoff: {
-    summary: "Review fit of actives, frequency, and tolerability before approval.",
-    review_focus: ["Suitability for sensitivity", "Pregnancy safety if relevant"]
+    summary: "Review product fit, usage frequency, and patient tolerability before approval.",
+    review_focus: ["Suitability for sensitivity", "Practical adherence"]
   },
   recommended_products: {
     cleanser: null,
@@ -174,7 +175,7 @@ export function buildManualPrompt(input: PromptInput) {
   );
   const scanInstruction =
     input.promptInputMode === "scan_assisted"
-      ? "Use the front, left, and right facial image references below as primary evidence. If the operator attaches the same images again in ChatGPT, treat those uploaded files as the final visual input."
+      ? "Use the front, left, and right facial image references below as primary evidence. If the operator uploads the same images manually in ChatGPT, treat the uploaded files as the final visual input."
       : "Do not assume access to images. Use only the written context below.";
 
   const scanContext =
@@ -197,16 +198,43 @@ export function buildManualPrompt(input: PromptInput) {
     "Do not ignore the questionnaire. It is authoritative patient context and must be used consistently.",
     "Use all available evidence together: patient metadata, questionnaire, manual notes, scan context, and image references.",
     hasCatalogAttachment
-      ? "A product catalog is attached below. Choose exact products only from that catalog and populate recommended_products with simple strings in this exact format: \"Brand - Product Name\". Use null only if no suitable product exists for a slot. Do not return nested objects inside recommended_products in catalog-attached mode."
+      ? 'A product catalog is attached below. Choose exact products only from that catalog and populate recommended_products with simple strings in this exact format: "Brand - Product Name". Use null only if no suitable product exists for a slot. Do not return nested objects inside recommended_products in catalog-attached mode.'
       : "No product catalog is attached. Leave recommended_products as null and let the platform do ingredient-based catalog matching later.",
     "",
+    "Scoring method:",
+    "- Internally score these 5 parameters from 0 to 10: Acne / Breakouts, Pigmentation / Dark Spots, Texture and Pores, Oiliness / Hydration, Sensitivity / Redness.",
+    "- Use the operator questionnaire, visible issues, negative findings, and image evidence together to determine each parameter score.",
+    "- Final skin_score.score must be the average of those 5 parameter scores, rounded to one decimal place.",
+    "- Do not return the 5 internal parameter scores in the JSON. Return only the final average score and label.",
+    "",
+    "Parameter rubrics:",
+    "- Acne / Breakouts: 9-10 Clear skin | 7-8 Rare pimples | 5-6 Occasional acne | 3-4 Moderate acne | 0-2 Severe acne",
+    "- Pigmentation / Dark Spots: 9-10 Even tone | 7-8 Very mild spots | 5-6 Noticeable pigmentation | 3-4 Uneven tone | 0-2 Deep pigmentation or melasma",
+    "- Texture and Pores: 9-10 Smooth refined skin | 7-8 Slight texture | 5-6 Visible pores | 3-4 Rough texture | 0-2 Very uneven texture or large pores",
+    "- Oiliness / Hydration: 9-10 Well balanced | 7-8 Slight imbalance | 5-6 Oily or dry in areas | 3-4 Noticeable imbalance | 0-2 Very oily or very dry",
+    "- Sensitivity / Redness: 9-10 No sensitivity | 7-8 Mild sensitivity | 5-6 Occasional redness | 3-4 Reactive skin | 0-2 Highly sensitive or inflamed",
+    "",
+    "Final score labels:",
+    "- 9-10: Excellent (Healthy & glowing)",
+    "- 7-8.9: Good (Minor concerns)",
+    "- 5-6.9: Moderate (Needs improvement)",
+    "- 3-4.9: Concerning (Active issues)",
+    "- 0-2.9: Severe (Needs treatment focus)",
+    "",
     "Analysis enums:",
-    "- skin_score.label: Needs Attention | Moderate Concerns | Good, Needs Improvement | Healthy Skin",
+    "- skin_score.label: Excellent (Healthy & glowing) | Good (Minor concerns) | Moderate (Needs improvement) | Concerning (Active issues) | Severe (Needs treatment focus)",
     "- overall_severity: None | Mild | Moderate | Severe",
     "- oil_levels: Low | Medium | High",
     "- hydration: Low | Good",
     "- texture: Smooth | Uneven",
     "- tone: Even | Uneven",
+    "",
+    "Routine quantity rules:",
+    `- Sunscreen: ${DEFAULT_USAGE_AMOUNTS.sunscreen}`,
+    `- Facewash / Cleanser: ${DEFAULT_USAGE_AMOUNTS.cleanser}`,
+    `- Moisturizer: ${DEFAULT_USAGE_AMOUNTS.moisturizer}`,
+    `- Repair or active cream: ${DEFAULT_USAGE_AMOUNTS.repairCream}`,
+    `- Serum: ${DEFAULT_USAGE_AMOUNTS.serum}`,
     "",
     scanInstruction,
     "",
@@ -232,7 +260,9 @@ export function buildManualPrompt(input: PromptInput) {
     hasCatalogAttachment ? "Attached product catalog:" : "Product catalog attachment: none",
     hasCatalogAttachment ? input.productCatalogText ?? "" : "",
     "",
-    "For catalog-attached mode, recommended_products values should be strings like \"Cetaphil - Gentle Skin Cleanser\" or null. For non-catalog mode, keep recommended_products as null.\n\nReturn JSON in this exact structure:",
+    'For catalog-attached mode, recommended_products values should be strings like "Cetaphil - Gentle Skin Cleanser" or null. For non-catalog mode, keep recommended_products as null.',
+    "",
+    "Return JSON in this exact structure:",
     promptDraftPlaceholder
   ].join("\n");
 }

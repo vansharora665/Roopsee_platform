@@ -18,10 +18,10 @@ const exampleEnvLines = [
   '# Supabase settings for your project',
   'NEXT_PUBLIC_SUPABASE_URL="https://YOUR_PROJECT.supabase.co"',
   'SUPABASE_SERVICE_ROLE_KEY="YOUR_SERVICE_ROLE_KEY"',
-  'SUPABASE_PROFILES_TABLE=&quot;users&quot;',
-  'SUPABASE_PROFILES_UPDATED_AT_COLUMN=&quot;updated_at&quot;',
-  'SUPABASE_SCANS_TABLE=&quot;skin_scans&quot;',
-  'SUPABASE_STORAGE_BUCKET=&quot;skin-scans&quot;',
+  'SUPABASE_PROFILES_TABLE="master_user_quiz"',
+  'SUPABASE_PROFILES_UPDATED_AT_COLUMN="updated_at"',
+  'TELEGRAM_BOT_TOKEN=""',
+  'TELEGRAM_CHAT_ID=""',
   '',
   '# Optional helpers',
   'PRODUCT_CATALOG_WORKBOOK_PATH="/Users/vansharora665/Downloads/Final Dr.Monika database.xlsx"',
@@ -88,14 +88,14 @@ export default async function EnvSetupPage() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="space-y-3">
-          <h2 className="text-xl font-semibold text-slate-900">Your Supabase users mapping</h2>
+          <h2 className="text-xl font-semibold text-slate-900">Your Supabase master table mapping</h2>
           <ul className="list-disc space-y-2 pl-5 text-sm text-slate-700">
-            <li><code>users.name</code> becomes the profile name in the intake form.</li>
-            <li><code>users.email</code> and <code>users.phone_no</code> are stored in the synced profile.</li>
-            <li><code>users.skin_type</code> and <code>users.skin_concerns</code> are folded into the profile summary.</li>
-            <li><code>users.skin_quiz</code> is treated as the quiz JSON source.</li>
-            <li><code>users.updated_at</code> is used to pull the newest users first.</li>
-            <li><code>skin_scans</code> is matched to <code>users.id</code> and front, left, right scans are used for the three report images.</li>
+            <li><code>master_user_quiz.name</code> becomes the profile name in the intake form.</li>
+            <li><code>master_user_quiz.email</code> and <code>master_user_quiz.phone_no</code> are stored in the synced profile.</li>
+            <li><code>master_user_quiz.gender</code> becomes the inherited gender/sex field.</li>
+            <li><code>master_user_quiz.answers</code> is treated as the quiz JSON source.</li>
+            <li><code>master_user_quiz.image_url</code>, <code>image_url_left</code>, and <code>image_url_right</code> supply the three report images.</li>
+            <li><code>master_user_quiz.skin_type</code>, <code>skin_concerns</code>, and <code>updated_at</code> are read directly from the same row.</li>
           </ul>
         </Card>
 
@@ -104,10 +104,9 @@ export default async function EnvSetupPage() {
           <ul className="list-disc space-y-2 pl-5 text-sm text-slate-700">
             <li><code>NEXT_PUBLIC_SUPABASE_URL</code>: your Supabase project URL.</li>
             <li><code>SUPABASE_SERVICE_ROLE_KEY</code>: server-side service role key from Supabase settings.</li>
-            <li><code>SUPABASE_PROFILES_TABLE=&quot;users&quot;</code>: keeps sync pointed at the table from your screenshot.</li>
+            <li><code>SUPABASE_PROFILES_TABLE=&quot;master_user_quiz&quot;</code>: points the app to the single source-of-truth table.</li>
             <li><code>SUPABASE_PROFILES_UPDATED_AT_COLUMN=&quot;updated_at&quot;</code>: sorts newest rows first.</li>
-            <li><code>SUPABASE_SCANS_TABLE=&quot;skin_scans&quot;</code>: pulls the 3 face scans linked to the user.</li>
-            <li><code>SUPABASE_STORAGE_BUCKET=&quot;skin-scans&quot;</code>: the public bucket that contains <code>&lt;user-id&gt;/front|left|right</code> scan files.</li>
+            <li><code>TELEGRAM_BOT_TOKEN</code> and <code>TELEGRAM_CHAT_ID</code>: enable the draft-generated and doctor-approved bot messages.</li>
           </ul>
         </Card>
       </div>

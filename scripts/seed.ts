@@ -149,8 +149,8 @@ async function main() {
   });
 
   const approvedDraft = clonePromptDraft();
-  approvedDraft.analysis.skin_score.score = 7;
-  approvedDraft.analysis.skin_score.label = "Good, Needs Improvement";
+  approvedDraft.analysis.skin_score.score = 7.4;
+  approvedDraft.analysis.skin_score.label = "Good (Minor concerns)";
   approvedDraft.analysis.overall_skin_profile.skin_type = "Combination";
   approvedDraft.analysis.overall_skin_profile.condition = "Mild pigmentation with dehydration tendency";
   approvedDraft.analysis.key_skin_concerns.primary = ["Pigmentation", "Uneven tone"];
@@ -299,8 +299,8 @@ async function main() {
   });
 
   const draftOnly = clonePromptDraft();
-  draftOnly.analysis.skin_score.score = 5;
-  draftOnly.analysis.skin_score.label = "Moderate Concerns";
+  draftOnly.analysis.skin_score.score = 5.6;
+  draftOnly.analysis.skin_score.label = "Moderate (Needs improvement)";
   draftOnly.analysis.overall_skin_profile.skin_type = "Combination to oily";
   draftOnly.analysis.overall_skin_profile.condition = "Congestion-prone skin with mild dehydration";
   draftOnly.analysis.overall_skin_profile.overall_severity = "Moderate";

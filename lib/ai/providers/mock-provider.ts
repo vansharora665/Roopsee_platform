@@ -12,8 +12,8 @@ export class MockAnalysisProvider implements AnalysisProvider {
     if (lowerPrompt.includes("acne") || lowerPrompt.includes("breakout")) {
       return {
         skin_score: {
-          score: 5,
-          label: "Moderate Concerns"
+          score: 4.8,
+          label: "Concerning (Active issues)"
         },
         overall_skin_profile: {
           skin_type: "Combination to oily",

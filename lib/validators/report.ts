@@ -1,10 +1,31 @@
 import { z } from "zod";
 
-import { analysisOutputSchema } from "@/lib/validators/analysis";
+import {
+  analysisOutputSchema,
+  hydrationSchema,
+  oilLevelsSchema,
+  overallSeveritySchema,
+  textureSchema,
+  toneSchema
+} from "@/lib/validators/analysis";
 import { reportDraftSchema } from "@/lib/validators/draft";
 
 const requiredString = z.string().trim().min(1);
 const optionalString = z.string().trim().optional().nullable();
+
+const doctorAnalysisOverrideSchema = z.object({
+  skinScore: z.number().min(0).max(10),
+  skinType: requiredString,
+  condition: requiredString,
+  overallSeverity: overallSeveritySchema,
+  primaryConcerns: z.array(requiredString).max(5),
+  secondaryConcerns: z.array(requiredString).max(5),
+  positiveFindings: z.array(requiredString).max(6),
+  oilLevels: oilLevelsSchema,
+  hydration: hydrationSchema,
+  texture: textureSchema,
+  tone: toneSchema
+});
 
 export const reportStatusSchema = z.enum([
   "draft_generated",
@@ -69,7 +90,8 @@ export const doctorReviewUpdateSchema = z.object({
   doThis: z.array(requiredString).default([]),
   notThat: z.array(requiredString).default([]),
   expertTips: z.array(requiredString).default([]),
-  doctorNotes: z.string().trim().optional().nullable()
+  doctorNotes: z.string().trim().optional().nullable(),
+  analysisOverride: doctorAnalysisOverrideSchema.optional().nullable()
 });
 
 export const reportStatusUpdateSchema = z.object({

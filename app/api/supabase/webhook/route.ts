@@ -1,6 +1,7 @@
 import { apiResponse, handleApiError } from "@/lib/api";
 import {
   ingestSupabaseWebhookRow,
+  syncSupabaseProfileByEmail,
   syncSupabaseProfileByExternalId
 } from "@/lib/supabase/profile-service";
 
@@ -11,10 +12,6 @@ function readString(value: unknown) {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
-}
-
-function looksLikeSkinScansRow(row: Record<string, unknown>) {
-  return ["front", "left", "right", "front_url", "left_url", "right_url"].some((key) => key in row);
 }
 
 export async function POST(request: Request) {
@@ -28,30 +25,23 @@ export async function POST(request: Request) {
     const row = body.record ?? body.new ?? body;
 
     if (!row || typeof row !== "object" || Array.isArray(row)) {
-      throw new Error("Webhook payload must contain a profile record");
+      throw new Error("Webhook payload must contain a master_user_quiz row");
     }
 
     const record = row as Record<string, unknown>;
-    const table = readString(body.table);
-    const profileIdFromUser = readString(record.id);
-    const profileIdFromScan = readString(record.user_id) ?? profileIdFromUser;
+    const profileId = readString(record.id);
+    const email = readString(record.email);
 
-    if (table === "skin_scans" || looksLikeSkinScansRow(record)) {
-      if (!profileIdFromScan) {
-        throw new Error("skin_scans webhook payload must include user_id or id");
+    if (profileId) {
+      const syncedProfile = await syncSupabaseProfileByExternalId(profileId);
+
+      if (syncedProfile) {
+        return apiResponse(syncedProfile);
       }
-
-      const syncedProfile = await syncSupabaseProfileByExternalId(profileIdFromScan);
-
-      if (!syncedProfile) {
-        throw new Error(`Could not find matching users row for scan profile ${profileIdFromScan}`);
-      }
-
-      return apiResponse(syncedProfile);
     }
 
-    if (profileIdFromUser) {
-      const syncedProfile = await syncSupabaseProfileByExternalId(profileIdFromUser);
+    if (email) {
+      const syncedProfile = await syncSupabaseProfileByEmail(email);
 
       if (syncedProfile) {
         return apiResponse(syncedProfile);

@@ -1,4 +1,5 @@
 import { formatDate } from "@/lib/utils";
+import { getActiveScorePoint, getSkinScoreSummary } from "@/lib/report/score";
 import type { ReportDetailDto, RoutineItem } from "@/lib/report/types";
 
 function Placeholder({ text }: { text: string }) {
@@ -51,11 +52,51 @@ function renderStringList(items: string[], emptyText: string) {
   );
 }
 
+function getCleanserDisplayLabel(
+  brand?: string | null,
+  company?: string | null,
+  product?: string | null
+) {
+  const combined = [brand, company, product].filter(Boolean).join(" ").toLowerCase();
+
+  if (combined.includes("facewash") || combined.includes("face wash")) {
+    return "Facewash";
+  }
+
+  if (combined.includes("cleanser")) {
+    return "Cleanser";
+  }
+
+  return "Cleanser / Facewash";
+}
+
+function renderVerifiedStamp(report: ReportDetailDto) {
+  if (!["approved", "sent_to_user"].includes(report.status)) {
+    return null;
+  }
+
+  return (
+    <div className="verified-stamp">
+      <div className="verified-stamp-title">Doctor Verified</div>
+      <div className="verified-stamp-subtitle">
+        {report.approvedBy?.name ? `Approved by ${report.approvedBy.name}` : "Approved report"}
+      </div>
+      <div className="verified-stamp-date">
+        {report.approvedAt ? formatDate(report.approvedAt) : formatDate(report.updatedAt)}
+      </div>
+    </div>
+  );
+}
+
 export function ReportDocument({ report }: { report: ReportDetailDto }) {
+  const activeScorePoint = getActiveScorePoint(report.analysisOutput.skinScore);
+
   return (
     <div className="report-root">
       <section className="report-page">
-        <h1 className="title">Skin Analysis Report</h1>
+        <div className="title-wrap">
+          <h1 className="title">Skin Analysis Report</h1>
+        </div>
 
         <div className="top-grid">
           <div className="pill">
@@ -95,14 +136,14 @@ export function ReportDocument({ report }: { report: ReportDetailDto }) {
         </div>
 
         <div className="score-wrap">
-          <div className="score-label">Your Skin Score</div>
+          <div className="score-label">{getSkinScoreSummary(report.analysisOutput.skinScore)}</div>
           <div className="score-line">
             {Array.from({ length: 10 }, (_, index) => {
               const value = index + 1;
 
               return (
                 <div
-                  className={`score-point ${value === report.analysisOutput.skinScore ? "active" : ""}`}
+                  className={`score-point ${value === activeScorePoint ? "active" : ""}`}
                   key={value}
                 >
                   <span>{value}</span>
@@ -111,10 +152,11 @@ export function ReportDocument({ report }: { report: ReportDetailDto }) {
             })}
           </div>
           <div className="score-bands">
-            <div className="needs">Needs Attention</div>
-            <div className="moderate">Moderate Concerns</div>
-            <div className="improvement">Good, Needs Improvement</div>
-            <div className="healthy">Healthy Skin</div>
+            <div className="severe">Severe</div>
+            <div className="concerning">Concerning</div>
+            <div className="moderate">Moderate</div>
+            <div className="good">Good</div>
+            <div className="excellent">Excellent</div>
           </div>
         </div>
 
@@ -185,7 +227,11 @@ export function ReportDocument({ report }: { report: ReportDetailDto }) {
             <div className="section-header blue">Recommended Products</div>
             <div className="section-content">
               {renderProductLine(
-                "Cleanser",
+                getCleanserDisplayLabel(
+                  report.doctorReview.cleanserBrand,
+                  report.doctorReview.cleanserCompany,
+                  report.doctorReview.cleanserProductName
+                ),
                 report.doctorReview.cleanserBrand,
                 report.doctorReview.cleanserCompany,
                 report.doctorReview.cleanserProductName
@@ -228,13 +274,6 @@ export function ReportDocument({ report }: { report: ReportDetailDto }) {
         </div>
 
         <div className="panel-grid" style={{ marginTop: "18px" }}>
-          <div className="section-box full">
-            <div className="section-header blue">Expert Tips</div>
-            <div className="section-content">
-              {renderStringList(report.doctorReview.expertTips, "Doctor has not added expert tips yet.")}
-            </div>
-          </div>
-
           <div className="section-box">
             <div className="section-header green">Do This</div>
             <div className="section-content">
@@ -260,6 +299,8 @@ export function ReportDocument({ report }: { report: ReportDetailDto }) {
             </div>
           </div>
         </div>
+
+        <div className="bottom-approval-row">{renderVerifiedStamp(report)}</div>
 
         <div className="footer">
           <div>

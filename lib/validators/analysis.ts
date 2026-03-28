@@ -1,10 +1,11 @@
 import { z } from "zod";
 
 export const skinScoreLabelSchema = z.enum([
-  "Needs Attention",
-  "Moderate Concerns",
-  "Good, Needs Improvement",
-  "Healthy Skin"
+  "Excellent (Healthy & glowing)",
+  "Good (Minor concerns)",
+  "Moderate (Needs improvement)",
+  "Concerning (Active issues)",
+  "Severe (Needs treatment focus)"
 ]);
 
 export const overallSeveritySchema = z.enum(["None", "Mild", "Moderate", "Severe"]);
@@ -13,11 +14,17 @@ export const hydrationSchema = z.enum(["Low", "Good"]);
 export const textureSchema = z.enum(["Smooth", "Uneven"]);
 export const toneSchema = z.enum(["Even", "Uneven"]);
 
+const skinScoreValueSchema = z
+  .number()
+  .min(0)
+  .max(10)
+  .refine((value) => Number.isInteger(value * 10), "Skin score must use at most one decimal place");
+
 export const analysisOutputSchema = z
   .object({
     skin_score: z
       .object({
-        score: z.number().int().min(1).max(10),
+        score: skinScoreValueSchema,
         label: skinScoreLabelSchema
       })
       .strict(),
@@ -65,8 +72,8 @@ export const analysisJsonSchema = {
       required: ["score", "label"],
       properties: {
         score: {
-          type: "integer",
-          minimum: 1,
+          type: "number",
+          minimum: 0,
           maximum: 10
         },
         label: {

@@ -164,8 +164,8 @@ function buildInheritedProfileContext(profile: SyncedProfileDto | null) {
 
 function valuesForStatus(includeProductCatalogInPrompt: boolean) {
   return includeProductCatalogInPrompt
-    ? "Prompt generated with inherited users.skin_quiz data, current front/left/right image references, and the imported product catalog for direct GPT product selection."
-    : "Prompt generated with inherited users.skin_quiz data and the current front/left/right image references. Product selection will fall back to ingredient-based catalog matching.";
+    ? "Prompt generated with inherited master_user_quiz answers, gender, current front/left/right image URLs, and the imported product catalog for direct GPT product selection."
+    : "Prompt generated with inherited master_user_quiz answers, gender, and current front/left/right image URLs. Product selection will fall back to ingredient-based catalog matching.";
 }
 
 async function uploadSelectedImages(values: FormValues) {
@@ -280,7 +280,7 @@ export function NewReportForm({ initialProfiles }: { initialProfiles: SyncedProf
     form.setValue("image2Url", profile.scanUrls[1] ?? "");
     form.setValue("image3Url", profile.scanUrls[2] ?? "");
     setStatusMessage(
-      "Profile details, quiz responses from users.skin_quiz, and front/left/right scan URLs were inherited automatically."
+      "Profile details, master_user_quiz answers, gender, and front/left/right image URLs were inherited automatically."
     );
   }
 
@@ -544,7 +544,7 @@ export function NewReportForm({ initialProfiles }: { initialProfiles: SyncedProf
               </div>
               <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
                 <p>
-                  Quiz responses were inherited from <code>users.skin_quiz</code> and will be included automatically when you generate the prompt.
+                  Quiz responses, gender, and image URLs were inherited from <code>master_user_quiz</code> and will be included automatically when you generate the prompt.
                 </p>
                 <p className="mt-1 text-emerald-700">
                   Inherited questionnaire lines: {selectedProfileQuizLines.length}
@@ -709,7 +709,7 @@ export function NewReportForm({ initialProfiles }: { initialProfiles: SyncedProf
               </p>
               <h2 className="mt-2 text-2xl font-semibold text-slate-900">Generate and copy the fixed GPT prompt</h2>
               <p className="mt-2 max-w-3xl text-sm text-slate-600">
-                The prompt automatically includes the selected profile metadata, the questionnaire inherited from <code>users.skin_quiz</code>, the scan context, and the current front/left/right image references. If catalog attachment is enabled, it also includes the imported product list so GPT can choose exact products directly.
+                The prompt automatically includes the selected profile metadata, the questionnaire inherited from <code>master_user_quiz.answers</code>, the scan context, and the current front/left/right image references. If catalog attachment is enabled, it also includes the imported product list so GPT can choose exact products directly.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">

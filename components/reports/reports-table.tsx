@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { formatDate } from "@/lib/utils";
+import { formatSkinScore } from "@/lib/report/score";
 import type { ReportListItemDto } from "@/lib/report/types";
 
 export function ReportsTable({ reports }: { reports: ReportListItemDto[] }) {
@@ -51,7 +52,7 @@ export function ReportsTable({ reports }: { reports: ReportListItemDto[] }) {
                   <Badge status={report.status}>{report.status.replaceAll("_", " ")}</Badge>
                 </td>
                 <td className="px-5 py-4 align-top">
-                  <div className="font-semibold text-slate-900">{report.analysisOutput.skinScore}/10</div>
+                  <div className="font-semibold text-slate-900">{formatSkinScore(report.analysisOutput.skinScore)}/10</div>
                   <div className="text-slate-500">{report.analysisOutput.skinScoreLabel}</div>
                 </td>
                 <td className="px-5 py-4 align-top">
