@@ -588,7 +588,11 @@ export function NewReportForm({ initialProfiles }: { initialProfiles: SyncedProf
             </label>
             <label className="space-y-2 text-sm font-medium text-slate-700">
               Sex
-              <Select {...form.register("sex")} disabled={isProfileLocked}>
+              <Select
+                value={form.watch("sex")}
+                onChange={(event) => form.setValue("sex", event.target.value, { shouldDirty: true })}
+                disabled={isProfileLocked}
+              >
                 <option value="Female">Female</option>
                 <option value="Male">Male</option>
                 <option value="Non-binary">Non-binary</option>
