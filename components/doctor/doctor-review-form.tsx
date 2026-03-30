@@ -164,7 +164,10 @@ function catalogText(product: ProductCatalogDto) {
     product.category,
     product.claimedSkinConcerns.join(", "),
     product.claimedSkinTypes.join(", "),
-    product.heroIngredients.join(", ")
+    product.heroIngredients.join(", "),
+    product.otherKeyIngredients.join(", "),
+    product.qty ?? "",
+    product.sourceRowNumber ? String(product.sourceRowNumber) : ""
   ]
     .filter(Boolean)
     .join(" ")
@@ -395,9 +398,9 @@ function ProductPicker({
         </Button>
       </div>
       {isOpen ? (
-        <div className="max-h-72 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+        <div className="max-h-[32rem] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
           <p className="px-3 pb-2 text-xs font-medium text-slate-500">
-            {filteredCatalog.length} matching products
+            {filteredCatalog.length} matching products. Scroll to browse the full list.
           </p>
           {filteredCatalog.length > 0 ? filteredCatalog.map((product) => (
             <button

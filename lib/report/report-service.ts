@@ -391,22 +391,8 @@ function buildLegacyDoctorFieldsFromRows(rows: DoctorProductRowDto[]): LegacyDoc
 
 async function buildApprovedProductsPayload(report: ReportDetailDto) {
   const rows = normalizeDoctorProductRows(report.doctorReview.productRows);
-  const productCatalogIds = rows
-    .map((row) => row.productCatalogId)
-    .filter((value): value is string => Boolean(value));
-  const requiresCatalogLookup = rows.some((row) => !row.productCatalogId && (row.productName || row.brand || row.company));
-  const catalogProducts = productCatalogIds.length > 0 || requiresCatalogLookup
-    ? await prisma.productCatalog.findMany({
-        ...(productCatalogIds.length > 0 && !requiresCatalogLookup
-          ? {
-              where: {
-                id: {
-                  in: productCatalogIds
-                }
-              }
-            }
-          : {})
-      })
+  const catalogProducts = rows.length > 0
+    ? await prisma.productCatalog.findMany()
     : [];
   const catalogById = new Map(catalogProducts.map((product) => [product.id, product]));
   const fallbackConcerns = [...report.analysisOutput.primaryConcerns, ...report.analysisOutput.secondaryConcerns]
@@ -415,7 +401,10 @@ async function buildApprovedProductsPayload(report: ReportDetailDto) {
 
   function findCatalogProductForRow(row: DoctorProductRowDto) {
     if (row.productCatalogId) {
-      return catalogById.get(row.productCatalogId) ?? null;
+      const directMatch = catalogById.get(row.productCatalogId);
+      if (directMatch) {
+        return directMatch;
+      }
     }
 
     const normalizedBrand = normalizeComparableText(row.brand ?? row.company ?? null);
