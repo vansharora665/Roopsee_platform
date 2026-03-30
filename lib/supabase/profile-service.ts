@@ -1,3 +1,4 @@
+import { readFile } from "fs/promises";
 import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
@@ -30,6 +31,10 @@ function getQuizResultsTableName() {
 
 function getQuizResultsMatchColumn() {
   return process.env.SUPABASE_REPORTS_MATCH_COLUMN ?? "id";
+}
+
+function getReportsBucketName() {
+  return process.env.SUPABASE_REPORTS_BUCKET ?? "reports";
 }
 
 function getQuizResultsMatchColumns() {
@@ -342,6 +347,63 @@ export async function updateSupabaseUserProducts(args: {
   );
 }
 
+
+export async function uploadPublicReportPdf(args: {
+  reportId: string;
+  pdfPath: string;
+  pdfFileName: string;
+}) {
+  const supabase = getSupabaseAdminClient();
+  const bucket = getReportsBucketName();
+
+  const createBucketResult = await supabase.storage.createBucket(bucket, {
+    public: true,
+    fileSizeLimit: 20 * 1024 * 1024,
+    allowedMimeTypes: ["application/pdf"]
+  });
+
+  if (createBucketResult.error && !/already exists|duplicate/i.test(createBucketResult.error.message)) {
+    throw new Error(`Supabase reports bucket setup failed: ${createBucketResult.error.message}`);
+  }
+
+  if (createBucketResult.error) {
+    const updateBucketResult = await supabase.storage.updateBucket(bucket, {
+      public: true,
+      fileSizeLimit: 20 * 1024 * 1024,
+      allowedMimeTypes: ["application/pdf"]
+    });
+
+    if (updateBucketResult.error) {
+      throw new Error(`Supabase reports bucket update failed: ${updateBucketResult.error.message}`);
+    }
+  }
+
+  const fileBuffer = await readFile(args.pdfPath);
+  const objectPath = `reports/${args.reportId}/${args.pdfFileName}`;
+  const uploadResult = await supabase.storage
+    .from(bucket)
+    .upload(objectPath, fileBuffer, {
+      contentType: "application/pdf",
+      upsert: true
+    });
+
+  if (uploadResult.error) {
+    throw new Error(`Supabase report upload failed: ${uploadResult.error.message}`);
+  }
+
+  const publicUrlResult = supabase.storage.from(bucket).getPublicUrl(objectPath);
+  const publicUrl = publicUrlResult.data.publicUrl;
+
+  if (!publicUrl) {
+    throw new Error("Supabase report upload failed: public URL was not returned");
+  }
+
+  return {
+    bucket,
+    objectPath,
+    publicUrl
+  };
+}
 
 export async function updateSupabaseQuizResultReport(args: {
   quizResultId: string;

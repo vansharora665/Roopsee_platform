@@ -1,7 +1,8 @@
-import { mkdir, writeFile } from "fs/promises";
+import { mkdir, rm, writeFile } from "fs/promises";
 import path from "path";
 
 import { renderReportHtml } from "@/lib/report/render-report-html";
+import { uploadPublicReportPdf } from "@/lib/supabase/profile-service";
 import type { ReportDetailDto } from "@/lib/report/types";
 import { getGeneratedReportsDir } from "@/lib/storage/files";
 
@@ -56,8 +57,16 @@ export async function generateReportPdf(report: ReportDetailDto) {
     await browser.close();
   }
 
+  const uploaded = await uploadPublicReportPdf({
+    reportId: report.id,
+    pdfPath,
+    pdfFileName
+  });
+
+  await rm(pdfPath, { force: true }).catch(() => undefined);
+
   return {
-    pdfUrl: `/generated/reports/${pdfFileName}`,
+    pdfUrl: uploaded.publicUrl,
     htmlSnapshotPath: htmlPath
   };
 }
