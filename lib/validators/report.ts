@@ -13,6 +13,16 @@ import { reportDraftSchema } from "@/lib/validators/draft";
 const requiredString = z.string().trim().min(1);
 const optionalString = z.string().trim().optional().nullable();
 
+const doctorProductRowSchema = z.object({
+  id: z.string().trim().min(1),
+  title: z.string().trim().default(""),
+  slot: z.enum(["cleanser", "sunscreen", "moisturizer", "repair_serum"]).nullable().optional(),
+  productCatalogId: z.string().trim().optional().nullable(),
+  brand: optionalString,
+  company: optionalString,
+  productName: optionalString
+});
+
 const doctorAnalysisOverrideSchema = z.object({
   skinScore: z.number().min(0).max(10),
   skinType: requiredString,
@@ -85,6 +95,7 @@ export const doctorReviewUpdateSchema = z.object({
   repairSerumBrand: optionalString,
   repairSerumCompany: optionalString,
   repairSerumProductName: optionalString,
+  productRows: z.array(doctorProductRowSchema).default([]),
   morningRoutine: z.array(routineItemSchema).default([]),
   nightRoutine: z.array(routineItemSchema).default([]),
   doThis: z.array(requiredString).default([]),

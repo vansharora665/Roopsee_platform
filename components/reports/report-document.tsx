@@ -1,22 +1,50 @@
 import { formatDate } from "@/lib/utils";
 import { getActiveScorePoint, getSkinScoreSummary } from "@/lib/report/score";
-import type { ReportDetailDto, RoutineItem } from "@/lib/report/types";
+import type { DoctorProductRowDto, ReportDetailDto, RoutineItem } from "@/lib/report/types";
 
 function Placeholder({ text }: { text: string }) {
   return <span className="placeholder">{text}</span>;
 }
 
-function renderProductLine(
-  label: string,
-  brand?: string | null,
-  company?: string | null,
-  product?: string | null
-) {
-  const parts = [brand, company, product].filter(Boolean);
+function productRowParts(row: DoctorProductRowDto) {
+  return Array.from(new Set([row.brand, row.company, row.productName].filter(Boolean)));
+}
+
+function displayProductRowTitle(row: DoctorProductRowDto) {
+  if (row.title?.trim()) {
+    return row.title.trim();
+  }
+
+  switch (row.slot) {
+    case "cleanser": {
+      const combined = productRowParts(row).join(" ").toLowerCase();
+      if (combined.includes("facewash") || combined.includes("face wash")) {
+        return "Facewash";
+      }
+      if (combined.includes("cleanser")) {
+        return "Cleanser";
+      }
+      return "Cleanser / Facewash";
+    }
+    case "sunscreen":
+      return "Sunscreen";
+    case "moisturizer":
+      return "Moisturizer";
+    case "repair_serum":
+      return "Repair / Serum";
+    default:
+      return "";
+  }
+}
+
+function renderProductRow(row: DoctorProductRowDto) {
+  const parts = productRowParts(row);
+  const label = displayProductRowTitle(row);
 
   return (
     <div className="product-item">
-      <strong>{label}</strong>{" "}
+      {label ? <strong>{label}</strong> : null}
+      {label ? " " : null}
       {parts.length > 0 ? parts.join(" - ") : <Placeholder text="To be completed by doctor" />}
     </div>
   );
@@ -50,24 +78,6 @@ function renderStringList(items: string[], emptyText: string) {
       ))}
     </ul>
   );
-}
-
-function getCleanserDisplayLabel(
-  brand?: string | null,
-  company?: string | null,
-  product?: string | null
-) {
-  const combined = [brand, company, product].filter(Boolean).join(" ").toLowerCase();
-
-  if (combined.includes("facewash") || combined.includes("face wash")) {
-    return "Facewash";
-  }
-
-  if (combined.includes("cleanser")) {
-    return "Cleanser";
-  }
-
-  return "Cleanser / Facewash";
 }
 
 function renderVerifiedStamp(report: ReportDetailDto) {
@@ -226,34 +236,11 @@ export function ReportDocument({ report }: { report: ReportDetailDto }) {
           <div className="section-box full">
             <div className="section-header blue">Recommended Products</div>
             <div className="section-content">
-              {renderProductLine(
-                getCleanserDisplayLabel(
-                  report.doctorReview.cleanserBrand,
-                  report.doctorReview.cleanserCompany,
-                  report.doctorReview.cleanserProductName
-                ),
-                report.doctorReview.cleanserBrand,
-                report.doctorReview.cleanserCompany,
-                report.doctorReview.cleanserProductName
-              )}
-              {renderProductLine(
-                "Sunscreen",
-                report.doctorReview.sunscreenBrand,
-                report.doctorReview.sunscreenCompany,
-                report.doctorReview.sunscreenProductName
-              )}
-              {renderProductLine(
-                "Moisturizer",
-                report.doctorReview.moisturizerBrand,
-                report.doctorReview.moisturizerCompany,
-                report.doctorReview.moisturizerProductName
-              )}
-              {renderProductLine(
-                "Repair/Serum",
-                report.doctorReview.repairSerumBrand,
-                report.doctorReview.repairSerumCompany,
-                report.doctorReview.repairSerumProductName
-              )}
+              {report.doctorReview.productRows.filter((row) => row.title || row.brand || row.company || row.productName || row.productCatalogId).length > 0
+                ? report.doctorReview.productRows
+                    .filter((row) => row.title || row.brand || row.company || row.productName || row.productCatalogId)
+                    .map((row) => <div key={row.id}>{renderProductRow(row)}</div>)
+                : <Placeholder text="To be completed by doctor" />}
             </div>
           </div>
         </div>

@@ -20,7 +20,9 @@ import { getGeneratedReportsDir, getUploadsReportsDir } from "@/lib/storage/file
 import type {
   BuildPromptResultDto,
   CreateReportInputDto,
+  DoctorProductRowDto,
   DoctorReviewInputDto,
+  ProductCatalogDto,
   ProductSlotDto,
   ReportDetailDto,
   ReportListItemDto,
@@ -30,6 +32,7 @@ import type {
 import {
   extractStoredScanUrls,
   getSyncedProfileById,
+  updateSupabaseQuizResultReport,
   updateSupabaseUserProducts
 } from "@/lib/supabase/profile-service";
 import {
@@ -160,50 +163,313 @@ function mergePreferredProductMatches(
   });
 }
 
+const defaultProductRowConfig = [
+  { slot: "cleanser", title: "Cleanser / Facewash" },
+  { slot: "sunscreen", title: "Sunscreen" },
+  { slot: "moisturizer", title: "Moisturizer" },
+  { slot: "repair_serum", title: "Repair / Serum" }
+] as const satisfies ReadonlyArray<{ slot: ProductSlotDto; title: string }>;
 
-function buildApprovedProductsPayload(report: ReportDetailDto) {
-  const products = [
+type LegacyDoctorProductFields = Pick<
+  DoctorReviewInputDto,
+  | "cleanserBrand"
+  | "cleanserCompany"
+  | "cleanserProductName"
+  | "sunscreenBrand"
+  | "sunscreenCompany"
+  | "sunscreenProductName"
+  | "moisturizerBrand"
+  | "moisturizerCompany"
+  | "moisturizerProductName"
+  | "repairSerumBrand"
+  | "repairSerumCompany"
+  | "repairSerumProductName"
+>;
+
+type MatchLike = {
+  slot: ProductSlotDto;
+  rank: number;
+  product: {
+    id: string;
+    brandName: string;
+    productName: string;
+    productType?: string | null;
+  };
+};
+
+function normalizeText(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function normalizeComparableText(value: string | null | undefined) {
+  return (value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function numberFromNullableString(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Number.parseFloat(value.replace(/[^\d.]+/g, ""));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function stringArrayFromJson(value: Prisma.JsonValue | null | undefined) {
+  if (!Array.isArray(value)) {
+    return [] as string[];
+  }
+
+  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+}
+
+function defaultProductRowTitle(slot: ProductSlotDto, productType?: string | null) {
+  if (slot === "cleanser") {
+    const normalizedProductType = (productType ?? "").toLowerCase();
+
+    if (normalizedProductType.includes("face wash") || normalizedProductType.includes("facewash")) {
+      return "Facewash";
+    }
+
+    if (normalizedProductType.includes("cleanser")) {
+      return "Cleanser";
+    }
+  }
+
+  return defaultProductRowConfig.find((item) => item.slot === slot)?.title ?? "Recommended Product";
+}
+
+function getProductTypeFallback(slot: ProductSlotDto | null, title?: string | null) {
+  const normalizedTitle = (title ?? "").toLowerCase();
+
+  if (slot === "cleanser") {
+    return normalizedTitle.includes("facewash") || normalizedTitle.includes("face wash")
+      ? "Facewash"
+      : "Cleanser";
+  }
+
+  if (slot === "sunscreen") {
+    return "Sunscreen";
+  }
+
+  if (slot === "moisturizer") {
+    return "Moisturizer";
+  }
+
+  if (slot === "repair_serum") {
+    return normalizedTitle.includes("cream") ? "Active Cream" : "Serum";
+  }
+
+  return normalizeText(title) ?? "Recommended Product";
+}
+
+function buildProductRowFromMatch(config: (typeof defaultProductRowConfig)[number], match?: MatchLike): DoctorProductRowDto {
+  return {
+    id: `${config.slot}-${match?.product.id ?? "default"}`,
+    title: defaultProductRowTitle(config.slot, match?.product.productType ?? null),
+    slot: config.slot,
+    productCatalogId: match?.product.id ?? null,
+    brand: match?.product.brandName ?? null,
+    company: match?.product.brandName ?? null,
+    productName: match?.product.productName ?? null
+  };
+}
+
+function buildDefaultDoctorProductRows(matches: MatchLike[]): DoctorProductRowDto[] {
+  return defaultProductRowConfig.map((config) => {
+    const match = matches
+      .filter((item) => item.slot === config.slot)
+      .sort((left, right) => left.rank - right.rank)[0];
+
+    return buildProductRowFromMatch(config, match);
+  });
+}
+
+function hasAnyLegacyProductFields(fields: LegacyDoctorProductFields) {
+  return Object.values(fields).some((value) => Boolean(normalizeText(value)));
+}
+
+function buildProductRowsFromLegacyFields(fields: LegacyDoctorProductFields): DoctorProductRowDto[] {
+  return [
     {
+      id: "cleanser-row",
+      title: defaultProductRowTitle("cleanser"),
       slot: "cleanser",
-      brand: report.doctorReview.cleanserBrand,
-      company: report.doctorReview.cleanserCompany,
-      product_name: report.doctorReview.cleanserProductName
+      productCatalogId: null,
+      brand: normalizeText(fields.cleanserBrand),
+      company: normalizeText(fields.cleanserCompany),
+      productName: normalizeText(fields.cleanserProductName)
     },
     {
+      id: "sunscreen-row",
+      title: defaultProductRowTitle("sunscreen"),
       slot: "sunscreen",
-      brand: report.doctorReview.sunscreenBrand,
-      company: report.doctorReview.sunscreenCompany,
-      product_name: report.doctorReview.sunscreenProductName
+      productCatalogId: null,
+      brand: normalizeText(fields.sunscreenBrand),
+      company: normalizeText(fields.sunscreenCompany),
+      productName: normalizeText(fields.sunscreenProductName)
     },
     {
+      id: "moisturizer-row",
+      title: defaultProductRowTitle("moisturizer"),
       slot: "moisturizer",
-      brand: report.doctorReview.moisturizerBrand,
-      company: report.doctorReview.moisturizerCompany,
-      product_name: report.doctorReview.moisturizerProductName
+      productCatalogId: null,
+      brand: normalizeText(fields.moisturizerBrand),
+      company: normalizeText(fields.moisturizerCompany),
+      productName: normalizeText(fields.moisturizerProductName)
     },
     {
+      id: "repair-serum-row",
+      title: defaultProductRowTitle("repair_serum"),
       slot: "repair_serum",
-      brand: report.doctorReview.repairSerumBrand,
-      company: report.doctorReview.repairSerumCompany,
-      product_name: report.doctorReview.repairSerumProductName
+      productCatalogId: null,
+      brand: normalizeText(fields.repairSerumBrand),
+      company: normalizeText(fields.repairSerumCompany),
+      productName: normalizeText(fields.repairSerumProductName)
     }
   ];
+}
 
-  return products.flatMap((product) => {
-    const brand = product.brand?.trim() || "";
-    const company = product.company?.trim() || "";
-    const productName = product.product_name?.trim() || "";
+function normalizeDoctorProductRows(
+  rows: Array<{
+    id: string;
+    title: string;
+    slot?: ProductSlotDto | null;
+    productCatalogId?: string | null;
+    brand?: string | null;
+    company?: string | null;
+    productName?: string | null;
+  }>
+) {
+  return rows
+    .map((row, index) => {
+      const slot = row.slot ?? null;
+      const title = normalizeText(row.title) ?? (slot ? defaultProductRowTitle(slot) : "");
+      const brand = normalizeText(row.brand);
+      const company = normalizeText(row.company) ?? brand;
+      const productName = normalizeText(row.productName);
+      const productCatalogId = normalizeText(row.productCatalogId);
 
-    if (!brand && !company && !productName) {
+      return {
+        id: normalizeText(row.id) ?? `product-row-${index + 1}`,
+        title,
+        slot,
+        productCatalogId,
+        brand,
+        company,
+        productName
+      } satisfies DoctorProductRowDto;
+    })
+    .filter((row) => row.title || row.slot || row.productCatalogId || row.brand || row.company || row.productName);
+}
+
+function buildLegacyDoctorFieldsFromRows(rows: DoctorProductRowDto[]): LegacyDoctorProductFields {
+  const firstRowForSlot = (slot: ProductSlotDto) => rows.find((row) => row.slot === slot) ?? null;
+  const cleanser = firstRowForSlot("cleanser");
+  const sunscreen = firstRowForSlot("sunscreen");
+  const moisturizer = firstRowForSlot("moisturizer");
+  const repairSerum = firstRowForSlot("repair_serum");
+
+  return {
+    cleanserBrand: cleanser?.brand ?? null,
+    cleanserCompany: cleanser?.company ?? null,
+    cleanserProductName: cleanser?.productName ?? null,
+    sunscreenBrand: sunscreen?.brand ?? null,
+    sunscreenCompany: sunscreen?.company ?? null,
+    sunscreenProductName: sunscreen?.productName ?? null,
+    moisturizerBrand: moisturizer?.brand ?? null,
+    moisturizerCompany: moisturizer?.company ?? null,
+    moisturizerProductName: moisturizer?.productName ?? null,
+    repairSerumBrand: repairSerum?.brand ?? null,
+    repairSerumCompany: repairSerum?.company ?? null,
+    repairSerumProductName: repairSerum?.productName ?? null
+  };
+}
+
+async function buildApprovedProductsPayload(report: ReportDetailDto) {
+  const rows = normalizeDoctorProductRows(report.doctorReview.productRows);
+  const productCatalogIds = rows
+    .map((row) => row.productCatalogId)
+    .filter((value): value is string => Boolean(value));
+  const requiresCatalogLookup = rows.some((row) => !row.productCatalogId && (row.productName || row.brand || row.company));
+  const catalogProducts = productCatalogIds.length > 0 || requiresCatalogLookup
+    ? await prisma.productCatalog.findMany({
+        ...(productCatalogIds.length > 0 && !requiresCatalogLookup
+          ? {
+              where: {
+                id: {
+                  in: productCatalogIds
+                }
+              }
+            }
+          : {})
+      })
+    : [];
+  const catalogById = new Map(catalogProducts.map((product) => [product.id, product]));
+  const fallbackConcerns = [...report.analysisOutput.primaryConcerns, ...report.analysisOutput.secondaryConcerns]
+    .filter(Boolean)
+    .join(", ");
+
+  function findCatalogProductForRow(row: DoctorProductRowDto) {
+    if (row.productCatalogId) {
+      return catalogById.get(row.productCatalogId) ?? null;
+    }
+
+    const normalizedBrand = normalizeComparableText(row.brand ?? row.company ?? null);
+    const normalizedProductName = normalizeComparableText(row.productName);
+
+    if (!normalizedBrand && !normalizedProductName) {
+      return null;
+    }
+
+    return (
+      catalogProducts.find((product) => {
+        const productBrand = normalizeComparableText(product.brandName);
+        const productName = normalizeComparableText(product.productName);
+
+        if (normalizedBrand && normalizedProductName) {
+          return productBrand === normalizedBrand && productName === normalizedProductName
+        }
+
+        if (normalizedProductName) {
+          return productName === normalizedProductName;
+        }
+
+        return productBrand === normalizedBrand;
+      }) ?? null
+    );
+  }
+
+  return rows.flatMap((row) => {
+    const catalogProduct = findCatalogProductForRow(row);
+    const brandName = catalogProduct?.brandName ?? row.brand ?? row.company ?? "";
+    const productName = catalogProduct?.productName ?? row.productName ?? "";
+
+    if (!brandName && !productName) {
       return [];
     }
 
+    const claimedSkinType = catalogProduct
+      ? stringArrayFromJson(catalogProduct.claimedSkinTypes).join(", ")
+      : "";
+    const claimedSkinConcerns = catalogProduct
+      ? stringArrayFromJson(catalogProduct.claimedSkinConcerns).join(", ")
+      : "";
+
     return [
       {
-        slot: product.slot,
-        ...(brand ? { brand } : {}),
-        ...(company ? { company } : {}),
-        ...(productName ? { product_name: productName } : {})
+        id: catalogProduct?.sourceRowNumber ?? null,
+        mrp: numberFromNullableString(catalogProduct?.mrp ?? null),
+        qty: catalogProduct?.qty ?? null,
+        image_url: null,
+        brand_name: brandName,
+        product_name: productName,
+        product_type: catalogProduct?.productType ?? getProductTypeFallback(row.slot, row.title),
+        claimed_skin_type: claimedSkinType || report.analysisOutput.skinType,
+        claimed_skin_concerns: claimedSkinConcerns || fallbackConcerns
       }
     ];
   });
@@ -215,9 +481,37 @@ function getSupabaseUserId(report: ReportDetailDto) {
   }
 
   const profileJson = report.syncedProfile.profileJson as Record<string, unknown>;
-  const userId = profileJson.user_id ?? profileJson.quiz_user_id;
+  const userId = profileJson.user_id ?? profileJson.quiz_user_id ?? profileJson.userId;
 
   return typeof userId === "string" && userId.trim().length > 0 ? userId : null;
+}
+
+function getSupabaseQuizResultId(report: ReportDetailDto) {
+  if (!report.syncedProfile) {
+    return null;
+  }
+
+  const profileJson = report.syncedProfile.profileJson as Record<string, unknown>;
+  const quizResultId = profileJson.quiz_result_id ?? profileJson.quizResultId ?? report.syncedProfile.externalId;
+
+  return typeof quizResultId === "string" && quizResultId.trim().length > 0 ? quizResultId : null;
+}
+
+function toAbsoluteReportUrl(pdfUrl: string | null | undefined) {
+  if (!pdfUrl) {
+    return null;
+  }
+
+  if (pdfUrl.startsWith("http://") || pdfUrl.startsWith("https://")) {
+    return pdfUrl;
+  }
+
+  const appUrl = process.env.APP_URL?.trim();
+  if (!appUrl || !pdfUrl.startsWith("/")) {
+    return pdfUrl;
+  }
+
+  return `${appUrl.replace(/\/$/, "")}${pdfUrl}`;
 }
 
 async function syncApprovedProductsToSupabase(report: ReportDetailDto) {
@@ -229,7 +523,7 @@ async function syncApprovedProductsToSupabase(report: ReportDetailDto) {
 
   await updateSupabaseUserProducts({
     userId,
-    products: buildApprovedProductsPayload(report)
+    products: await buildApprovedProductsPayload(report)
   });
 }
 
@@ -347,11 +641,8 @@ export async function createReport(input: CreateReportInputDto): Promise<ReportD
     ? resolveAiRecommendedProducts(draftResult.draft.recommended_products, catalog)
     : [];
   const productMatches = mergePreferredProductMatches(aiRecommendedMatches, fallbackProductMatches);
-
-  const cleanserProduct = bestProductForSlot(productMatches, "cleanser");
-  const sunscreenProduct = bestProductForSlot(productMatches, "sunscreen");
-  const moisturizerProduct = bestProductForSlot(productMatches, "moisturizer");
-  const repairSerumProduct = bestProductForSlot(productMatches, "repair_serum");
+  const defaultProductRows = buildDefaultDoctorProductRows(productMatches);
+  const legacyDoctorProductFields = buildLegacyDoctorFieldsFromRows(defaultProductRows);
 
   const record = await prisma.report.create({
     data: {
@@ -426,18 +717,8 @@ export async function createReport(input: CreateReportInputDto): Promise<ReportD
       },
       doctorReview: {
         create: {
-          cleanserBrand: cleanserProduct?.brandName ?? null,
-          cleanserCompany: cleanserProduct?.brandName ?? null,
-          cleanserProductName: cleanserProduct?.productName ?? null,
-          sunscreenBrand: sunscreenProduct?.brandName ?? null,
-          sunscreenCompany: sunscreenProduct?.brandName ?? null,
-          sunscreenProductName: sunscreenProduct?.productName ?? null,
-          moisturizerBrand: moisturizerProduct?.brandName ?? null,
-          moisturizerCompany: moisturizerProduct?.brandName ?? null,
-          moisturizerProductName: moisturizerProduct?.productName ?? null,
-          repairSerumBrand: repairSerumProduct?.brandName ?? null,
-          repairSerumCompany: repairSerumProduct?.brandName ?? null,
-          repairSerumProductName: repairSerumProduct?.productName ?? null,
+          ...legacyDoctorProductFields,
+          productRows: defaultProductRows as Prisma.InputJsonValue,
           morningRoutine: buildRoutineItems(draftResult.draft.routine_plan.morning),
           nightRoutine: buildRoutineItems(draftResult.draft.routine_plan.night),
           doThis: [],
@@ -473,6 +754,36 @@ export async function createReport(input: CreateReportInputDto): Promise<ReportD
   await sendTelegramMessage(`draft for ${serializedReport.patientInfo.name} report is generated`);
 
   return serializedReport;
+}
+
+function serializeProductCatalogRecord(product: Awaited<ReturnType<typeof prisma.productCatalog.findMany>>[number]): ProductCatalogDto {
+  return {
+    id: product.id,
+    sourceRowNumber: product.sourceRowNumber ?? null,
+    brandName: product.brandName,
+    productName: product.productName,
+    qty: product.qty ?? null,
+    mrp: numberFromNullableString(product.mrp),
+    imageUrl: null,
+    category: product.category ?? null,
+    productType: product.productType ?? null,
+    claimedSkinTypes: stringArrayFromJson(product.claimedSkinTypes),
+    claimedSkinConcerns: stringArrayFromJson(product.claimedSkinConcerns),
+    heroIngredients: stringArrayFromJson(product.heroIngredients),
+    otherKeyIngredients: stringArrayFromJson(product.otherKeyIngredients),
+    potentialIrritants: stringArrayFromJson(product.potentialIrritants),
+    textureFinish: product.textureFinish ?? null,
+    overallSuitabilityScore: product.overallSuitabilityScore ?? null,
+    productUrl: product.productUrl ?? null
+  };
+}
+
+export async function listProductCatalog(): Promise<ProductCatalogDto[]> {
+  const catalog = await prisma.productCatalog.findMany({
+    orderBy: [{ category: "asc" }, { productType: "asc" }, { brandName: "asc" }, { productName: "asc" }]
+  });
+
+  return catalog.map(serializeProductCatalogRecord);
 }
 
 export async function listReports(status?: ReportStatusDto): Promise<ReportListItemDto[]> {
@@ -634,7 +945,23 @@ export async function updateDoctorReview(
 ): Promise<ReportDetailDto> {
   const reviewer = await getCurrentUser();
   const validatedInput = doctorReviewUpdateSchema.parse(input);
-  const { analysisOverride, ...doctorReviewInput } = validatedInput;
+  const {
+    analysisOverride,
+    productRows,
+    cleanserBrand,
+    cleanserCompany,
+    cleanserProductName,
+    sunscreenBrand,
+    sunscreenCompany,
+    sunscreenProductName,
+    moisturizerBrand,
+    moisturizerCompany,
+    moisturizerProductName,
+    repairSerumBrand,
+    repairSerumCompany,
+    repairSerumProductName,
+    ...doctorReviewInput
+  } = validatedInput;
 
   const existingReport = await prisma.report.findUnique({
     where: {
@@ -647,14 +974,40 @@ export async function updateDoctorReview(
     throw new Error("Report not found");
   }
 
+  const catalog = analysisOverride ? await prisma.productCatalog.findMany() : [];
   const rerankedMatches = analysisOverride
     ? rankProductsForDraft({
         patientSkinType: analysisOverride.skinType,
         quizSummaryJson: existingReport.assets?.quizSummaryJson ?? undefined,
         draft: normalizeDraftScore(buildDraftFromAnalysis(buildAnalysisFromDoctorOverride(analysisOverride))),
-        catalog: await prisma.productCatalog.findMany()
+        catalog
       })
     : null;
+
+  const existingSerializedReport = serializeReport(existingReport);
+  const submittedLegacyFields: LegacyDoctorProductFields = {
+    cleanserBrand,
+    cleanserCompany,
+    cleanserProductName,
+    sunscreenBrand,
+    sunscreenCompany,
+    sunscreenProductName,
+    moisturizerBrand,
+    moisturizerCompany,
+    moisturizerProductName,
+    repairSerumBrand,
+    repairSerumCompany,
+    repairSerumProductName
+  };
+  const candidateProductRows = productRows.length > 0
+    ? productRows
+    : hasAnyLegacyProductFields(submittedLegacyFields)
+      ? buildProductRowsFromLegacyFields(submittedLegacyFields)
+      : existingSerializedReport.doctorReview.productRows.length > 0
+        ? existingSerializedReport.doctorReview.productRows
+        : buildDefaultDoctorProductRows(rerankedMatches ?? existingSerializedReport.productMatches);
+  const normalizedProductRows = normalizeDoctorProductRows(candidateProductRows);
+  const legacyDoctorProductFields = buildLegacyDoctorFieldsFromRows(normalizedProductRows);
 
   const report = await prisma.report.update({
     where: {
@@ -664,6 +1017,8 @@ export async function updateDoctorReview(
       doctorReview: {
         update: {
           ...doctorReviewInput,
+          ...legacyDoctorProductFields,
+          productRows: normalizedProductRows as Prisma.InputJsonValue,
           reviewedByUserId: reviewer?.id ?? null
         }
       },
@@ -831,5 +1186,16 @@ export async function saveGeneratedFiles(
     include: reportInclude
   });
 
-  return serializeReport(report);
+  const serializedReport = serializeReport(report);
+  const quizResultId = getSupabaseQuizResultId(serializedReport);
+  const absoluteReportUrl = toAbsoluteReportUrl(serializedReport.generatedFile?.pdfUrl ?? null);
+
+  if (quizResultId && absoluteReportUrl) {
+    await updateSupabaseQuizResultReport({
+      quizResultId,
+      reportUrl: absoluteReportUrl
+    });
+  }
+
+  return serializedReport;
 }

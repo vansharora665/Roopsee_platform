@@ -10,6 +10,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function appendUnique(target: string[], values: string[]) {
+  for (const value of values) {
+    if (!target.includes(value)) {
+      target.push(value);
+    }
+  }
+}
+
 function toStringArray(value: unknown): string[] {
   if (typeof value === "string") {
     return value
@@ -24,6 +32,38 @@ function toStringArray(value: unknown): string[] {
 
   if (typeof value === "number" || typeof value === "boolean") {
     return [String(value)];
+  }
+
+  if (isRecord(value)) {
+    const collected: string[] = [];
+    appendUnique(collected, toStringArray(value.selected));
+    appendUnique(collected, toStringArray(value.answer));
+    appendUnique(collected, toStringArray(value.answers));
+    appendUnique(collected, toStringArray(value.value));
+    appendUnique(collected, toStringArray(value.response));
+
+    if (isRecord(value.details)) {
+      for (const [detailKey, detailValue] of Object.entries(value.details)) {
+        const detailLines = toStringArray(detailValue);
+
+        if (detailLines.length === 0) {
+          continue;
+        }
+
+        const label = detailKey
+          .replace(/[_-]+/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+        const prefix = label.length > 0 ? `${label}: ` : "";
+
+        appendUnique(
+          collected,
+          detailLines.map((line) => `${prefix}${line}`)
+        );
+      }
+    }
+
+    return collected;
   }
 
   return [];
@@ -50,7 +90,7 @@ export function normalizeQuizAnswers(input: unknown): NormalizedQuizEntry[] {
           typeof item.question === "string"
             ? item.question
             : quizQuestionLookup[key]?.prompt ?? `Question ${key}`;
-        const answers = toStringArray(item.answer ?? item.answers ?? item.value ?? item.response);
+        const answers = toStringArray(item.answer ?? item.answers ?? item.value ?? item.response ?? item);
 
         return answers.length ? [{ key, question, answers }] : [];
       }
@@ -60,8 +100,8 @@ export function normalizeQuizAnswers(input: unknown): NormalizedQuizEntry[] {
         ? [
             {
               key: String(index + 1),
-              question: `Question ${index + 1}`,
-              answers
+              question: `Question ${index + 1}`
+              ,answers
             }
           ]
         : [];
@@ -88,7 +128,12 @@ export function detectSensitivitySignals(quizSummary: string[]) {
   const lower = quizSummary.join(" ").toLowerCase();
 
   return {
-    sensitive: lower.includes("sensitive") || lower.includes("burning") || lower.includes("itch"),
+    sensitive:
+      lower.includes("sensitive") ||
+      lower.includes("burning") ||
+      lower.includes("itch") ||
+      lower.includes("reactive") ||
+      lower.includes("sting"),
     pregnant:
       lower.includes("pregnant") ||
       lower.includes("breastfeeding") ||

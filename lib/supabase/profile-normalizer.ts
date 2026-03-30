@@ -17,6 +17,64 @@ function toNumber(value: unknown) {
   return null;
 }
 
+function extractAgeFromAnswers(value: unknown): number | null {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value === "number" || typeof value === "string") {
+    const parsed = toNumber(value);
+    return parsed && parsed >= 1 && parsed <= 120 ? parsed : null;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const nestedAge = extractAgeFromAnswers(item);
+      if (nestedAge !== null) {
+        return nestedAge;
+      }
+    }
+
+    return null;
+  }
+
+  if (isRecord(value)) {
+    for (const key of ["age", "age_years", "years", "dob", "date_of_birth", "birth_date", "year_of_birth"]) {
+      if (!(key in value)) {
+        continue;
+      }
+
+      const nestedAge = extractAgeFromAnswers(value[key]);
+      if (nestedAge !== null) {
+        return nestedAge;
+      }
+    }
+
+    for (const nestedValue of Object.values(value)) {
+      const nestedAge = extractAgeFromAnswers(nestedValue);
+      if (nestedAge !== null) {
+        return nestedAge;
+      }
+    }
+  }
+
+  return null;
+}
+
+function extractAge(row: Record<string, unknown>): number | null {
+  const directAge = toNumber(row.age ?? row.age_years);
+  if (directAge && directAge >= 1 && directAge <= 120) {
+    return directAge;
+  }
+
+  const quizAge = extractAgeFromAnswers(row.answers);
+  if (quizAge && quizAge >= 1 && quizAge <= 120) {
+    return quizAge;
+  }
+
+  return null;
+}
+
 function toStringValue(value: unknown) {
   if (typeof value === "string") {
     const trimmed = value.trim();
@@ -152,7 +210,7 @@ export function normalizeSupabaseProfileRow(
   const fullName = toStringValue(row.name);
   const email = toStringValue(row.email);
   const phone = toStringValue(row.phone_no);
-  const age = toNumber(row.age);
+  const age = extractAge(row);
   const sex = normalizeGenderValue(row.gender);
   const skinType = toStringValue(row.skin_type);
   const skinConcerns = stringArray(row.skin_concerns);

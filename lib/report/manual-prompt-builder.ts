@@ -31,19 +31,19 @@ type PromptInput = {
 export const promptJsonShape: ReportDraft = {
   analysis: {
     skin_score: {
-      score: 7.4,
-      label: "Good (Minor concerns)"
+      score: 6.8,
+      label: "Moderate (Needs improvement)"
     },
     overall_skin_profile: {
-      skin_type: "Combination",
-      condition: "Mild dehydration tendency with pigmentation and slight textural imbalance",
-      overall_severity: "Mild"
+      skin_type: "Example skin type",
+      condition: "Example overall condition summary",
+      overall_severity: "Moderate"
     },
     key_skin_concerns: {
-      primary: ["Pigmentation", "Uneven tone"],
-      secondary: ["Texture irregularity"]
+      primary: ["Example primary concern"],
+      secondary: ["Example secondary concern"]
     },
-    positive_findings: ["No active inflammatory acne"],
+    positive_findings: ["Example positive finding"],
     primary_observations: {
       oil_levels: "Medium",
       hydration: "Low",
@@ -195,8 +195,14 @@ export function buildManualPrompt(input: PromptInput) {
     "Only return the draft JSON required for the Roopsee platform.",
     "The doctor will review and finalize expert advice separately.",
     "Use the exact JSON shape shown below and keep enum values valid for the analysis section.",
+    "The JSON example below is a schema placeholder only. Do not copy its example values unless the case evidence truly supports them.",
     "Do not ignore the questionnaire. It is authoritative patient context and must be used consistently.",
     "Use all available evidence together: patient metadata, questionnaire, manual notes, scan context, and image references.",
+    "Primary concerns must be case-specific. Do not default to pigmentation, uneven tone, acne, or dehydration unless the evidence clearly supports those concerns.",
+    "Different cases with different questionnaire responses and image findings must produce meaningfully different scores, conditions, and concern lists.",
+    "Keep primary concerns to the 1 or 2 strongest issues only. Use secondary concerns for weaker or supporting issues.",
+    "If the evidence for a concern is weak, do not promote it to primary.",
+    "Choose cleanser versus facewash based on skin type, oiliness, hydration, and breakout tendency. Do not recommend serums, moisturizers, sunscreens, lip products, or body products in the cleanser slot.",
     hasCatalogAttachment
       ? 'A product catalog is attached below. Choose exact products only from that catalog and populate recommended_products with simple strings in this exact format: "Brand - Product Name". Use null only if no suitable product exists for a slot. Do not return nested objects inside recommended_products in catalog-attached mode.'
       : "No product catalog is attached. Leave recommended_products as null and let the platform do ingredient-based catalog matching later.",

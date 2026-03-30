@@ -8,6 +8,7 @@ import type {
 } from "@/lib/validators/draft";
 import type { AnalysisOutput } from "@/lib/validators/analysis";
 import type {
+  DoctorProductRowDto,
   ProductMatchDto,
   ReportDetailDto,
   ReportListItemDto,
@@ -93,6 +94,78 @@ function objectOrNull<T>(value: Prisma.JsonValue | null | undefined) {
   return isRecord(value) ? (value as T) : null;
 }
 
+function numberFromNullableString(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function productRowsFromJson(value: Prisma.JsonValue | null | undefined): DoctorProductRowDto[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((item, index) => {
+    if (!isRecord(item)) {
+      return [];
+    }
+
+    const id = typeof item.id === "string" && item.id.trim().length > 0 ? item.id : `row-${index + 1}`;
+    const title = typeof item.title === "string" ? item.title : "";
+    const slot = typeof item.slot === "string" ? item.slot : null;
+    const productCatalogId = typeof item.productCatalogId === "string" ? item.productCatalogId : null;
+    const brand = typeof item.brand === "string" ? item.brand : null;
+    const company = typeof item.company === "string" ? item.company : null;
+    const productName = typeof item.productName === "string" ? item.productName : null;
+
+    return [{ id, title, slot: slot as DoctorProductRowDto["slot"], productCatalogId, brand, company, productName }];
+  });
+}
+
+function buildFallbackProductRows(record: NonNullable<ReportRecord["doctorReview"]>): DoctorProductRowDto[] {
+  return [
+    {
+      id: "cleanser",
+      title: "Cleanser / Facewash",
+      slot: "cleanser" as const,
+      productCatalogId: null,
+      brand: record.cleanserBrand ?? null,
+      company: record.cleanserCompany ?? null,
+      productName: record.cleanserProductName ?? null
+    },
+    {
+      id: "sunscreen",
+      title: "Sunscreen",
+      slot: "sunscreen" as const,
+      productCatalogId: null,
+      brand: record.sunscreenBrand ?? null,
+      company: record.sunscreenCompany ?? null,
+      productName: record.sunscreenProductName ?? null
+    },
+    {
+      id: "moisturizer",
+      title: "Moisturizer",
+      slot: "moisturizer" as const,
+      productCatalogId: null,
+      brand: record.moisturizerBrand ?? null,
+      company: record.moisturizerCompany ?? null,
+      productName: record.moisturizerProductName ?? null
+    },
+    {
+      id: "repair_serum",
+      title: "Repair / Serum",
+      slot: "repair_serum" as const,
+      productCatalogId: null,
+      brand: record.repairSerumBrand ?? null,
+      company: record.repairSerumCompany ?? null,
+      productName: record.repairSerumProductName ?? null
+    }
+  ].filter((row) => row.brand || row.company || row.productName);
+}
+
 function serializeSyncedProfile(
   record: ReportRecord["syncedProfile"]
 ): SyncedProfileDto | null {
@@ -132,8 +205,12 @@ function serializeProductMatches(matches: ReportRecord["productMatches"]): Produ
     reason: isRecord(match.reasonJson) ? (match.reasonJson as Record<string, unknown>) : {},
     product: {
       id: match.product.id,
+      sourceRowNumber: match.product.sourceRowNumber ?? null,
       brandName: match.product.brandName,
       productName: match.product.productName,
+      qty: match.product.qty ?? null,
+      mrp: numberFromNullableString(match.product.mrp),
+      imageUrl: null,
       category: match.product.category,
       productType: match.product.productType,
       claimedSkinTypes: stringArrayFromJson(match.product.claimedSkinTypes),
@@ -235,6 +312,10 @@ export function serializeReport(record: ReportRecord): ReportDetailDto {
       repairSerumBrand: record.doctorReview.repairSerumBrand ?? null,
       repairSerumCompany: record.doctorReview.repairSerumCompany ?? null,
       repairSerumProductName: record.doctorReview.repairSerumProductName ?? null,
+      productRows: (() => {
+        const explicitRows = productRowsFromJson(record.doctorReview.productRows);
+        return explicitRows.length > 0 ? explicitRows : buildFallbackProductRows(record.doctorReview);
+      })(),
       morningRoutine: routineArrayFromJson(record.doctorReview.morningRoutine),
       nightRoutine: routineArrayFromJson(record.doctorReview.nightRoutine),
       doThis: stringArrayFromJson(record.doctorReview.doThis),

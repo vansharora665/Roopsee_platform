@@ -62,8 +62,12 @@ export type PromptSessionDto = {
 
 export type ProductCatalogDto = {
   id: string;
+  sourceRowNumber: number | null;
   brandName: string;
   productName: string;
+  qty: string | null;
+  mrp: number | null;
+  imageUrl: string | null;
   category: string | null;
   productType: string | null;
   claimedSkinTypes: string[];
@@ -74,6 +78,16 @@ export type ProductCatalogDto = {
   textureFinish: string | null;
   overallSuitabilityScore: number | null;
   productUrl: string | null;
+};
+
+export type DoctorProductRowDto = {
+  id: string;
+  title: string;
+  slot: ProductSlotDto | null;
+  productCatalogId: string | null;
+  brand: string | null;
+  company: string | null;
+  productName: string | null;
 };
 
 export type ProductMatchDto = {
@@ -154,6 +168,7 @@ export type ReportDetailDto = {
     repairSerumBrand: string | null;
     repairSerumCompany: string | null;
     repairSerumProductName: string | null;
+    productRows: DoctorProductRowDto[];
     morningRoutine: RoutineItem[];
     nightRoutine: RoutineItem[];
     doThis: string[];

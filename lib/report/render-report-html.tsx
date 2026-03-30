@@ -1,7 +1,7 @@
 import { formatDate } from "@/lib/utils";
 import { reportTemplateStyles } from "@/lib/report/template-styles";
 import { getActiveScorePoint, getSkinScoreSummary } from "@/lib/report/score";
-import type { ReportDetailDto, RoutineItem } from "@/lib/report/types";
+import type { DoctorProductRowDto, ReportDetailDto, RoutineItem } from "@/lib/report/types";
 
 function escapeHtml(value: string | number | null | undefined) {
   return String(value ?? "")
@@ -16,16 +16,44 @@ function renderPlaceholder(text: string) {
   return `<span class="placeholder">${escapeHtml(text)}</span>`;
 }
 
-function renderProductLine(
-  label: string,
-  brand?: string | null,
-  company?: string | null,
-  product?: string | null
-) {
-  const parts = [brand, company, product].filter(Boolean).map((part) => escapeHtml(part));
+function productRowParts(row: DoctorProductRowDto) {
+  return Array.from(new Set([row.brand, row.company, row.productName].filter(Boolean)));
+}
+
+function displayProductRowTitle(row: DoctorProductRowDto) {
+  if (row.title?.trim()) {
+    return row.title.trim();
+  }
+
+  switch (row.slot) {
+    case "cleanser": {
+      const combined = productRowParts(row).join(" ").toLowerCase();
+      if (combined.includes("facewash") || combined.includes("face wash")) {
+        return "Facewash";
+      }
+      if (combined.includes("cleanser")) {
+        return "Cleanser";
+      }
+      return "Cleanser / Facewash";
+    }
+    case "sunscreen":
+      return "Sunscreen";
+    case "moisturizer":
+      return "Moisturizer";
+    case "repair_serum":
+      return "Repair / Serum";
+    default:
+      return "";
+  }
+}
+
+function renderProductRow(row: DoctorProductRowDto) {
+  const parts = productRowParts(row).map((part) => escapeHtml(part));
+  const label = displayProductRowTitle(row);
+  const prefix = label ? `<strong>${escapeHtml(label)}</strong> ` : "";
   const value = parts.length > 0 ? parts.join(" - ") : renderPlaceholder("To be completed by doctor");
 
-  return `<div class="product-item"><strong>${escapeHtml(label)}</strong> ${value}</div>`;
+  return `<div class="product-item">${prefix}${value}</div>`;
 }
 
 function renderRoutine(items: RoutineItem[]) {
@@ -49,24 +77,6 @@ function renderStringList(items: string[], emptyText: string) {
   return `<ul class="meta-list">${items
     .map((item) => `<li>${escapeHtml(item)}</li>`)
     .join("")}</ul>`;
-}
-
-function getCleanserDisplayLabel(
-  brand?: string | null,
-  company?: string | null,
-  product?: string | null
-) {
-  const combined = [brand, company, product].filter(Boolean).join(" ").toLowerCase();
-
-  if (combined.includes("facewash") || combined.includes("face wash")) {
-    return "Facewash";
-  }
-
-  if (combined.includes("cleanser")) {
-    return "Cleanser";
-  }
-
-  return "Cleanser / Facewash";
 }
 
 function renderImageSlot(image: string | null | undefined, index: number) {
@@ -206,34 +216,12 @@ export function renderReportHtml(report: ReportDetailDto) {
           <div class="section-box full">
             <div class="section-header blue">Recommended Products</div>
             <div class="section-content">
-              ${renderProductLine(
-                getCleanserDisplayLabel(
-                  report.doctorReview.cleanserBrand,
-                  report.doctorReview.cleanserCompany,
-                  report.doctorReview.cleanserProductName
-                ),
-                report.doctorReview.cleanserBrand,
-                report.doctorReview.cleanserCompany,
-                report.doctorReview.cleanserProductName
-              )}
-              ${renderProductLine(
-                "Sunscreen",
-                report.doctorReview.sunscreenBrand,
-                report.doctorReview.sunscreenCompany,
-                report.doctorReview.sunscreenProductName
-              )}
-              ${renderProductLine(
-                "Moisturizer",
-                report.doctorReview.moisturizerBrand,
-                report.doctorReview.moisturizerCompany,
-                report.doctorReview.moisturizerProductName
-              )}
-              ${renderProductLine(
-                "Repair/Serum",
-                report.doctorReview.repairSerumBrand,
-                report.doctorReview.repairSerumCompany,
-                report.doctorReview.repairSerumProductName
-              )}
+              ${report.doctorReview.productRows.filter((row) => row.title || row.brand || row.company || row.productName || row.productCatalogId).length > 0
+                ? report.doctorReview.productRows
+                    .filter((row) => row.title || row.brand || row.company || row.productName || row.productCatalogId)
+                    .map((row) => renderProductRow(row))
+                    .join("")
+                : renderPlaceholder("To be completed by doctor")}
             </div>
           </div>
         </div>

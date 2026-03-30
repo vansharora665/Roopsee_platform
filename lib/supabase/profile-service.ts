@@ -24,6 +24,24 @@ function getUsersMatchColumn() {
   return process.env.SUPABASE_USERS_MATCH_COLUMN ?? "id";
 }
 
+function getQuizResultsTableName() {
+  return process.env.SUPABASE_REPORTS_TABLE ?? "quiz_results";
+}
+
+function getQuizResultsMatchColumn() {
+  return process.env.SUPABASE_REPORTS_MATCH_COLUMN ?? "id";
+}
+
+function getQuizResultsMatchColumns() {
+  return Array.from(
+    new Set(
+      [getQuizResultsMatchColumn(), "id", "quiz_result_id", "quizResultId"].filter(
+        (value): value is string => typeof value === "string" && value.trim().length > 0
+      )
+    )
+  );
+}
+
 async function purgeProfilesFromOtherSources() {
   await prisma.syncedProfile.deleteMany({
     where: {
@@ -53,10 +71,15 @@ function stringArrayFromUnknown(value: unknown) {
 }
 
 type ApprovedProductExport = {
-  slot: string;
-  brand?: string;
-  company?: string;
-  product_name?: string;
+  id: number | null;
+  mrp: number | null;
+  qty: string | null;
+  image_url: string | null;
+  brand_name: string;
+  product_name: string;
+  product_type: string | null;
+  claimed_skin_type: string;
+  claimed_skin_concerns: string;
 };
 
 function serializeSyncedProfile(record: {
@@ -299,4 +322,41 @@ export async function updateSupabaseUserProducts(args: {
   if (!data) {
     throw new Error(`Supabase products update failed: no ${getUsersMatchColumn()} row matched ${args.userId}`);
   }
+}
+
+
+export async function updateSupabaseQuizResultReport(args: {
+  quizResultId: string;
+  reportUrl: string;
+}) {
+  const supabase = getSupabaseAdminClient();
+  const table = getQuizResultsTableName();
+
+  let lastError: string | null = null;
+
+  for (const matchColumn of getQuizResultsMatchColumns()) {
+    const { data, error } = await supabase
+      .from(table)
+      .update({ reports: args.reportUrl })
+      .eq(matchColumn, args.quizResultId)
+      .select(matchColumn)
+      .maybeSingle();
+
+    if (error) {
+      lastError = `${matchColumn}: ${error.message}`;
+      continue;
+    }
+
+    if (data) {
+      return;
+    }
+  }
+
+  if (lastError) {
+    throw new Error(`Supabase quiz_results update failed: ${lastError}`);
+  }
+
+  throw new Error(
+    `Supabase quiz_results update failed: no row matched ${args.quizResultId} in columns ${getQuizResultsMatchColumns().join(", ")}`
+  );
 }

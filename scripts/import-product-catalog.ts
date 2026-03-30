@@ -99,6 +99,13 @@ async function main() {
   for (const [index, row] of rows.entries()) {
     const brandName = asString(row["Brand Name"]);
     const productName = asString(row["Product Name"]);
+    const sourceRowNumber =
+      asInt(row["S No."]) ??
+      asInt(row["S.No."]) ??
+      asInt(row["Serial No."]) ??
+      asInt(row["Sr No."]) ??
+      asInt(row["Sr. No."]) ??
+      index + 3;
 
     if (brandName === null || productName === null) {
       continue;
@@ -112,7 +119,7 @@ async function main() {
 
     await prisma.productCatalog.create({
       data: {
-        sourceRowNumber: index + 3,
+        sourceRowNumber,
         brandName,
         productName,
         qty: asString(row["Qty"]),

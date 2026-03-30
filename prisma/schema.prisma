@@ -171,6 +171,7 @@ model DoctorReview {
   repairSerumBrand       String?
   repairSerumCompany     String?
   repairSerumProductName String?
+  productRows            Json?
   morningRoutine         Json?
   nightRoutine           Json?
   doThis                 Json?

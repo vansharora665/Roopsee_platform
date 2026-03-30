@@ -12,18 +12,16 @@ export const quizQuestionBank: QuizQuestion[] = [
   },
   {
     id: "2",
-    prompt: "Do you experience frequent breakouts or acne?",
-    options: ["Yes", "No"]
+    prompt: "How often do you experience breakouts or acne?"
   },
   {
     id: "3",
     prompt: "How does your skin feel after washing your face?",
-    options: ["Normal", "Oily", "Dry or Tight", "Combination"]
+    options: ["Normal", "Oily", "Dry or Tight", "Combination (oily T-zone, dry cheeks)"]
   },
   {
     id: "4",
-    prompt: "Do you have sensitive skin?",
-    options: ["Yes", "No"]
+    prompt: "How often does your skin feel sensitive, irritated, or reactive?"
   },
   {
     id: "5",
@@ -36,53 +34,39 @@ export const quizQuestionBank: QuizQuestion[] = [
   },
   {
     id: "6",
-    prompt: "How are your eating habits?",
-    options: [
-      "Consume high sugar or dairy products frequently",
-      "Often have fried or processed foods",
-      "Eat fruits and vegetables daily",
-      "Have a healthy diet"
-    ]
+    prompt: "How are your eating habits?"
   },
   {
     id: "7",
-    prompt: "How much water do you drink daily?",
-    options: ["Less than 1 litre", "1-2 litres", "2-3 litres", "More than 3 litres"]
+    prompt: "How much water do you drink daily?"
   },
   {
     id: "8",
-    prompt: "Do you exercise daily?",
-    options: ["Yes", "No", "Sometimes"]
+    prompt: "How often do you exercise?"
   },
   {
     id: "9",
-    prompt: "Do you experience high stress levels?",
-    options: ["Yes", "No"]
+    prompt: "Do you experience high stress levels?"
   },
   {
     id: "10",
-    prompt: "How many hours do you sleep?",
-    options: ["< 6 Hours", "6-8 Hours", "8-10 Hours", "> 10 Hours"]
+    prompt: "How many hours do you sleep?"
   },
   {
     id: "11",
-    prompt: "Do you have any hormonal issues?",
-    options: ["PCOD/PCOS", "Thyroid", "No"]
+    prompt: "Do you have any hormonal issues?"
   },
   {
     id: "12",
-    prompt: "Are your periods regular?",
-    options: ["Yes", "No", "Sometimes irregular"]
+    prompt: "Are your periods regular?"
   },
   {
     id: "13",
-    prompt: "Are you?",
-    options: ["Pregnant", "Breastfeeding", "Planning for pregnancy", "None of the Above"]
+    prompt: "Are you?"
   },
   {
     id: "14",
-    prompt: "Any history of",
-    options: ["Herpes", "Eczema", "Psoriasis", "Any other skin infection", "No"]
+    prompt: "Any history of"
   },
   {
     id: "15",
@@ -90,14 +74,7 @@ export const quizQuestionBank: QuizQuestion[] = [
   },
   {
     id: "16",
-    prompt: "How is your environment where you stay or work?",
-    options: [
-      "Pollution and climate affect skin",
-      "Spend lots of time in sunlight",
-      "Most of the day in AC",
-      "Mostly on screens",
-      "Have a healthy environment"
-    ]
+    prompt: "How is your environment where you stay or work?"
   },
   {
     id: "17",
@@ -105,6 +82,10 @@ export const quizQuestionBank: QuizQuestion[] = [
   },
   {
     id: "18",
+    prompt: "How consistent is your current skincare routine?"
+  },
+  {
+    id: "19",
     prompt: "What are your expectations?"
   }
 ];

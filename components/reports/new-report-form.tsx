@@ -272,7 +272,7 @@ export function NewReportForm({ initialProfiles }: { initialProfiles: SyncedProf
 
     form.setValue("intakeSource", "supabase");
     form.setValue("name", profile.fullName ?? getProfileString(profile, ["name", "full_name"]) ?? "");
-    form.setValue("age", profile.age ?? getProfileNumber(profile, ["age"]) ?? 25);
+    form.setValue("age", profile.age ?? getProfileNumber(profile, ["age"]) ?? form.getValues("age"));
     form.setValue("sex", profile.sex ?? getProfileString(profile, ["sex", "gender"]) ?? "Female");
     form.setValue("questionnaireText", quizLines.join("\n"));
     form.setValue("profileHintsText", getProfileStringArray(profile, ["skin_concerns"]).join(", "));

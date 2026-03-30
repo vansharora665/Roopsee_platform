@@ -6,7 +6,7 @@ import { AnalysisSummary } from "@/components/reports/analysis-summary";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { getReportById } from "@/lib/report/report-service";
+import { getReportById, listProductCatalog } from "@/lib/report/report-service";
 import { formatDate } from "@/lib/utils";
 
 export default async function ReportDetailPage({
@@ -16,10 +16,14 @@ export default async function ReportDetailPage({
     id: string;
   };
 }) {
-  let report;
+  let report: Awaited<ReturnType<typeof getReportById>>;
+  let productCatalog: Awaited<ReturnType<typeof listProductCatalog>>;
 
   try {
-    report = await getReportById(params.id);
+    [report, productCatalog] = await Promise.all([
+      getReportById(params.id),
+      listProductCatalog()
+    ]);
   } catch (error) {
     if (error instanceof Error && error.message === "Report not found") {
       notFound();
@@ -92,7 +96,7 @@ export default async function ReportDetailPage({
       </div>
 
       <AnalysisSummary report={report} />
-      <DoctorReviewForm report={report} />
+      <DoctorReviewForm report={report} productCatalog={productCatalog} />
     </div>
   );
 }

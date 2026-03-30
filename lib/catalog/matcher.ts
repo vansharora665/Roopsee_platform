@@ -46,8 +46,15 @@ type MatchContext = {
 const slotKeywords: Record<ProductSlotDto, string[]> = {
   cleanser: ["cleanser", "face wash", "facewash", "face cleanser", "gel cleanser", "foaming cleanser"],
   sunscreen: ["sunscreen", "spf", "sun screen", "sunblock"],
-  moisturizer: ["moisturizer", "cream", "lotion", "gel moisturizer"],
-  repair_serum: ["serum", "repair", "treatment", "active", "corrector"]
+  moisturizer: ["moisturizer", "cream", "lotion", "gel moisturizer", "barrier cream"],
+  repair_serum: ["serum", "repair", "treatment", "active", "corrector", "spot cream", "gel cream"]
+};
+
+const slotExclusionKeywords: Record<ProductSlotDto, string[]> = {
+  cleanser: ["serum", "sunscreen", "spf", "moisturizer", "lotion", "lip", "body", "balm", "mask"],
+  sunscreen: ["serum", "cleanser", "face wash", "moisturizer", "lip balm", "body lotion"],
+  moisturizer: ["serum", "cleanser", "face wash", "sunscreen", "spf", "lip", "body"],
+  repair_serum: ["cleanser", "face wash", "sunscreen", "spf", "lip", "body", "soap"]
 };
 
 type CleanserPreference = {
@@ -92,6 +99,43 @@ function getProductTextPool(product: ProductCandidate) {
     product.brandName,
     product.textureFinish ?? ""
   ]);
+}
+
+function isFaceProduct(product: ProductCandidate) {
+  const category = (product.category ?? "").toLowerCase();
+  return category.length === 0 || category.includes("face");
+}
+
+function hasExcludedSlotKeyword(slot: ProductSlotDto, pool: string[]) {
+  return slotExclusionKeywords[slot].some((keyword) => includesToken(pool, keyword));
+}
+
+function isEligibleForSlot(slot: ProductSlotDto, product: ProductCandidate) {
+  const productTextPool = getProductTextPool(product);
+  const productType = (product.productType ?? "").toLowerCase();
+  const category = (product.category ?? "").toLowerCase();
+
+  if (!isFaceProduct(product)) {
+    return false;
+  }
+
+  if (hasExcludedSlotKeyword(slot, productTextPool)) {
+    return false;
+  }
+
+  if (slot === "cleanser") {
+    return slotMatchesProduct(slot, product) || productType.includes("cleanser") || productType.includes("face wash");
+  }
+
+  if (slot === "sunscreen") {
+    return slotMatchesProduct(slot, product) || productType.includes("sunscreen") || productTextPool.some((item) => item.includes("spf"));
+  }
+
+  if (slot === "moisturizer") {
+    return productType.includes("moisturizer") || productType.includes("cream") || productType.includes("lotion") || category.includes("face");
+  }
+
+  return productType.includes("serum") || productType.includes("treatment") || productTextPool.some((item) => item.includes("repair") || item.includes("active"));
 }
 
 function getCleanserPreference(args: {
@@ -186,7 +230,10 @@ export function rankProductsForDraft({ patientSkinType, quizSummaryJson, draft, 
         })
       : null;
 
-    const ranked = catalog
+    const eligibleCatalog = catalog.filter((product) => isEligibleForSlot(slot, product));
+    const candidateCatalog = eligibleCatalog.length > 0 ? eligibleCatalog : catalog;
+
+    const ranked = candidateCatalog
       .map((product) => {
         const ingredientPool = extractIngredientPool(product);
         const concernPool = extractConcernPool(product);
@@ -219,8 +266,13 @@ export function rankProductsForDraft({ patientSkinType, quizSummaryJson, draft, 
         if (slotMatchesProduct(slot, product)) {
           score += 36;
         } else {
-          score -= 10;
+          score -= 12;
           penalties.push("slot_mismatch");
+        }
+
+        if (!isEligibleForSlot(slot, product)) {
+          score -= 40;
+          penalties.push("slot_ineligible");
         }
 
         score += matchedHeroIngredients.length * 14;
@@ -346,7 +398,8 @@ function buildRecommendationCandidates(recommendation: RecommendedProduct) {
 
 function findCatalogProductFromRecommendation(
   recommendation: RecommendedProduct,
-  catalog: ProductCandidate[]
+  catalog: ProductCandidate[],
+  slot: ProductSlotDto
 ) {
   const lookup = buildRecommendationCandidates(recommendation);
   const normalizedBrand = normalizeLookupText(lookup.preferredBrand);
@@ -361,7 +414,7 @@ function findCatalogProductFromRecommendation(
       );
     });
 
-    if (exactMatch) {
+    if (exactMatch && isEligibleForSlot(slot, exactMatch)) {
       return exactMatch;
     }
   }
@@ -371,7 +424,7 @@ function findCatalogProductFromRecommendation(
     return normalizedCandidates.some((candidate) => candidate === combined);
   });
 
-  if (combinedMatch) {
+  if (combinedMatch && isEligibleForSlot(slot, combinedMatch)) {
     return combinedMatch;
   }
 
@@ -380,13 +433,16 @@ function findCatalogProductFromRecommendation(
       return normalizeLookupText(product.productName) === normalizedProductName;
     });
 
-    if (productNameMatch) {
+    if (productNameMatch && isEligibleForSlot(slot, productNameMatch)) {
       return productNameMatch;
     }
   }
 
   return (
     catalog.find((product) => {
+      if (!isEligibleForSlot(slot, product)) {
+        return false;
+      }
       const combined = normalizeLookupText(`${product.brandName} ${product.productName}`);
       const productName = normalizeLookupText(product.productName);
 
@@ -432,9 +488,9 @@ export function resolveAiRecommendedProducts(
         return [];
       }
 
-      const product = findCatalogProductFromRecommendation(recommendation, catalog);
+      const product = findCatalogProductFromRecommendation(recommendation, catalog, slot);
 
-      if (!product) {
+      if (!product || !isEligibleForSlot(slot, product)) {
         return [];
       }
 
@@ -458,9 +514,15 @@ export function formatProductCatalogForPrompt(catalog: ProductCandidate[]) {
 
   return catalog
     .map((product) => {
+      const sourceRowNumber = "sourceRowNumber" in product ? product.sourceRowNumber : null;
+      const qty = "qty" in product ? product.qty : null;
+      const mrp = "mrp" in product ? product.mrp : null;
       const parts = [
+        sourceRowNumber ? `Row ID: ${String(sourceRowNumber)}` : null,
         `[${product.productType ?? product.category ?? "Product"}]`,
         `${product.brandName} - ${product.productName}`,
+        qty ? `Qty: ${qty}` : null,
+        mrp ? `MRP: ${mrp}` : null,
         product.claimedSkinTypes ? `Skin types: ${stringArrayFromUnknown(product.claimedSkinTypes).join(", ") || "NR"}` : null,
         product.claimedSkinConcerns ? `Concerns: ${stringArrayFromUnknown(product.claimedSkinConcerns).join(", ") || "NR"}` : null,
         product.heroIngredients ? `Hero ingredients: ${stringArrayFromUnknown(product.heroIngredients).join(", ") || "NR"}` : null,
