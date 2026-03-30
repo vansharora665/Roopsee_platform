@@ -481,9 +481,13 @@ function getSupabaseUserId(report: ReportDetailDto) {
   }
 
   const profileJson = report.syncedProfile.profileJson as Record<string, unknown>;
-  const userId = profileJson.user_id ?? profileJson.quiz_user_id ?? profileJson.userId;
+  const userId = profileJson.user_id ?? profileJson.quiz_user_id ?? profileJson.userId ?? profileJson.id;
 
   return typeof userId === "string" && userId.trim().length > 0 ? userId : null;
+}
+
+function getSupabaseUserEmail(report: ReportDetailDto) {
+  return report.syncedProfile?.email?.trim() || null;
 }
 
 function getSupabaseQuizResultId(report: ReportDetailDto) {
@@ -516,13 +520,15 @@ function toAbsoluteReportUrl(pdfUrl: string | null | undefined) {
 
 async function syncApprovedProductsToSupabase(report: ReportDetailDto) {
   const userId = getSupabaseUserId(report);
+  const userEmail = getSupabaseUserEmail(report);
 
-  if (!userId) {
+  if (!userId && !userEmail) {
     return;
   }
 
   await updateSupabaseUserProducts({
     userId,
+    userEmail,
     products: await buildApprovedProductsPayload(report)
   });
 }

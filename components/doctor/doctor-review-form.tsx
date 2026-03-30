@@ -157,7 +157,15 @@ function renderRowProductLabel(row: Pick<ProductRowFormItem, "brand" | "company"
 }
 
 function catalogText(product: ProductCatalogDto) {
-  return [product.brandName, product.productName, product.productType, product.claimedSkinConcerns.join(", ")]
+  return [
+    product.brandName,
+    product.productName,
+    product.productType,
+    product.category,
+    product.claimedSkinConcerns.join(", "),
+    product.claimedSkinTypes.join(", "),
+    product.heroIngredients.join(", ")
+  ]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
@@ -195,8 +203,6 @@ function productSearchScore(product: ProductCatalogDto, query: string, slot: Pro
 
   if (isRelevantToSlot(product, slot)) {
     score += 22;
-  } else if (slot) {
-    score -= 30;
   }
 
   if (!normalizedQuery) {
@@ -330,14 +336,27 @@ function ProductPicker({
   }, [row.brand, row.company, row.productName, row.productCatalogId]);
 
   const filteredCatalog = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    const tokenizedQuery = normalizedQuery.split(/\s+/g).filter(Boolean);
+
     return catalog
       .map((product) => ({
         product,
         score: productSearchScore(product, query, row.slot)
       }))
-      .filter((item) => item.score > (query.trim() ? 0 : -100))
+      .filter((item) => {
+        if (!normalizedQuery) {
+          return true;
+        }
+
+        const haystack = catalogText(item.product);
+        return (
+          item.product.brandName.toLowerCase().includes(normalizedQuery) ||
+          item.product.productName.toLowerCase().includes(normalizedQuery) ||
+          tokenizedQuery.every((token) => haystack.includes(token))
+        );
+      })
       .sort((left, right) => right.score - left.score)
-      .slice(0, 12)
       .map((item) => item.product);
   }, [catalog, query, row.slot]);
 
@@ -377,6 +396,9 @@ function ProductPicker({
       </div>
       {isOpen ? (
         <div className="max-h-72 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+          <p className="px-3 pb-2 text-xs font-medium text-slate-500">
+            {filteredCatalog.length} matching products
+          </p>
           {filteredCatalog.length > 0 ? filteredCatalog.map((product) => (
             <button
               key={product.id}

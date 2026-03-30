@@ -302,26 +302,44 @@ export function extractStoredScanUrls(
 }
 
 export async function updateSupabaseUserProducts(args: {
-  userId: string;
+  userId: string | null;
+  userEmail?: string | null;
   products: ApprovedProductExport[];
 }) {
   const supabase = getSupabaseAdminClient();
   const table = getUsersTableName();
+  const attempts = [
+    args.userId ? { column: getUsersMatchColumn(), value: args.userId } : null,
+    args.userEmail ? { column: "email", value: args.userEmail } : null
+  ].filter((attempt): attempt is { column: string; value: string } => Boolean(attempt?.value));
 
-  const { data, error } = await supabase
-    .from(table)
-    .update({ products: args.products })
-    .eq(getUsersMatchColumn(), args.userId)
-    .select(getUsersMatchColumn())
-    .maybeSingle();
+  let lastError: string | null = null;
 
-  if (error) {
-    throw new Error(`Supabase products update failed: ${error.message}`);
+  for (const attempt of attempts) {
+    const { data, error } = await supabase
+      .from(table)
+      .update({ products: args.products })
+      .eq(attempt.column, attempt.value)
+      .select(attempt.column)
+      .maybeSingle();
+
+    if (error) {
+      lastError = `${attempt.column}: ${error.message}`;
+      continue;
+    }
+
+    if (data) {
+      return;
+    }
   }
 
-  if (!data) {
-    throw new Error(`Supabase products update failed: no ${getUsersMatchColumn()} row matched ${args.userId}`);
+  if (lastError) {
+    throw new Error(`Supabase products update failed: ${lastError}`);
   }
+
+  throw new Error(
+    `Supabase products update failed: no users row matched ${attempts.map((attempt) => `${attempt.column}=${attempt.value}`).join(", ") || "provided identifiers"}`
+  );
 }
 
 
