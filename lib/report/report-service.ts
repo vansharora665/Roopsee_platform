@@ -32,6 +32,7 @@ import type {
 import {
   extractStoredScanUrls,
   getSyncedProfileById,
+  listSupabaseProductMetadata,
   updateSupabaseQuizResultReport,
   updateSupabaseUserProducts
 } from "@/lib/supabase/profile-service";
@@ -394,7 +395,15 @@ async function buildApprovedProductsPayload(report: ReportDetailDto) {
   const catalogProducts = rows.length > 0
     ? await prisma.productCatalog.findMany()
     : [];
+  const supabaseProducts = rows.length > 0
+    ? await listSupabaseProductMetadata()
+    : [];
   const catalogById = new Map(catalogProducts.map((product) => [product.id, product]));
+  const supabaseProductById = new Map(
+    supabaseProducts
+      .filter((product): product is { id: number; brand_name: string | null; product_name: string | null; image_url: string | null } => typeof product.id === "number")
+      .map((product) => [product.id, product])
+  );
   const fallbackConcerns = [...report.analysisOutput.primaryConcerns, ...report.analysisOutput.secondaryConcerns]
     .filter(Boolean)
     .join(", ");
@@ -447,13 +456,24 @@ async function buildApprovedProductsPayload(report: ReportDetailDto) {
     const claimedSkinConcerns = catalogProduct
       ? stringArrayFromJson(catalogProduct.claimedSkinConcerns).join(", ")
       : "";
+    const normalizedBrand = normalizeComparableText(brandName);
+    const normalizedProductName = normalizeComparableText(productName);
+    const supabaseProduct = (
+      (typeof catalogProduct?.sourceRowNumber === "number" ? supabaseProductById.get(catalogProduct.sourceRowNumber) : null) ??
+      supabaseProducts.find((product) => {
+        const productBrand = normalizeComparableText(product.brand_name ?? null);
+        const foundProductName = normalizeComparableText(product.product_name ?? null);
+        return productBrand === normalizedBrand && foundProductName === normalizedProductName;
+      }) ??
+      null
+    );
 
     return [
       {
         id: catalogProduct?.sourceRowNumber ?? null,
         mrp: numberFromNullableString(catalogProduct?.mrp ?? null),
         qty: catalogProduct?.qty ?? null,
-        image_url: null,
+        image_url: supabaseProduct?.image_url ?? null,
         brand_name: brandName,
         product_name: productName,
         product_type: catalogProduct?.productType ?? getProductTypeFallback(row.slot, row.title),

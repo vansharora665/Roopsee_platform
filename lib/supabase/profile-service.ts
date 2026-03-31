@@ -17,6 +17,10 @@ function getUpdatedAtColumn() {
   return process.env.SUPABASE_PROFILES_UPDATED_AT_COLUMN ?? "completed_at";
 }
 
+function getProductsTableName() {
+  return process.env.SUPABASE_PRODUCTS_TABLE ?? "products";
+}
+
 function getUsersTableName() {
   return process.env.SUPABASE_USERS_TABLE ?? "users";
 }
@@ -304,6 +308,26 @@ export function extractStoredScanUrls(
   return profile.scanUrls.length > 0
     ? profile.scanUrls
     : Array.from(new Set(extractScanStrings(profile.scansJson)));
+}
+
+export async function listSupabaseProductMetadata() {
+  const supabase = getSupabaseAdminClient();
+  const table = getProductsTableName();
+  const { data, error } = await supabase
+    .from(table)
+    .select("id,brand_name,product_name,image_url")
+    .limit(500);
+
+  if (error) {
+    throw new Error(`Supabase products metadata lookup failed: ${error.message}`);
+  }
+
+  return (data ?? []) as Array<{
+    id: number | null;
+    brand_name: string | null;
+    product_name: string | null;
+    image_url: string | null;
+  }>;
 }
 
 export async function updateSupabaseUserProducts(args: {
