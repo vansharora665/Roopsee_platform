@@ -1,6 +1,6 @@
 import type { ProductCatalog } from "@prisma/client";
 
-import { detectSensitivitySignals, summarizeQuizAnswers } from "@/lib/quiz/summary";
+import { deriveQuizInsights, detectSensitivitySignals, summarizeQuizAnswers } from "@/lib/quiz/summary";
 import type { ProductSlotDto } from "@/lib/report/types";
 import type {
   RecommendedProduct,
@@ -206,15 +206,30 @@ function extractIrritantPool(product: ProductCandidate) {
 }
 
 export function rankProductsForDraft({ patientSkinType, quizSummaryJson, draft, catalog }: MatchContext) {
+  const quizInsights = deriveQuizInsights(quizSummaryJson);
   const concerns = tokenize([
     ...draft.analysis.key_skin_concerns.primary,
     ...draft.analysis.key_skin_concerns.secondary,
-    ...draft.product_matching.target_concerns
+    ...draft.product_matching.target_concerns,
+    ...quizInsights.concernCandidates,
+    ...quizInsights.secondaryConcernCandidates
   ]);
-  const preferredTextures = tokenize(draft.product_matching.preferred_textures);
-  const avoidIngredients = tokenize(draft.product_matching.avoid_ingredients);
-  const patientSkinTypeTokens = tokenize([patientSkinType]);
-  const sensitivitySignals = detectSensitivitySignals(summarizeQuizAnswers(quizSummaryJson));
+  const preferredTextures = tokenize([
+    ...draft.product_matching.preferred_textures,
+    ...quizInsights.preferredTextures
+  ]);
+  const avoidIngredients = tokenize([
+    ...draft.product_matching.avoid_ingredients,
+    ...quizInsights.avoidIngredients
+  ]);
+  const patientSkinTypeTokens = tokenize([patientSkinType, ...quizInsights.skinTypeHints]);
+  const detectedSignals = detectSensitivitySignals(summarizeQuizAnswers(quizSummaryJson));
+  const sensitivitySignals = {
+    sensitive: detectedSignals.sensitive || quizInsights.flags.sensitive,
+    pregnant: detectedSignals.pregnant || quizInsights.flags.pregnant,
+    eczema: detectedSignals.eczema || quizInsights.flags.eczema,
+    psoriasis: detectedSignals.psoriasis || quizInsights.flags.psoriasis
+  };
 
   return (Object.keys(slotKeywords) as ProductSlotDto[]).flatMap((slot) => {
     const desiredSlot = draft.ingredient_plan[slot];

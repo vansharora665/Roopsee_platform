@@ -1,5 +1,5 @@
 import { DEFAULT_USAGE_AMOUNTS } from "@/lib/report/default-guidance";
-import { summarizeQuizAnswers } from "@/lib/quiz/summary";
+import { deriveQuizInsights, summarizeQuizAnswers } from "@/lib/quiz/summary";
 import type { ReportDraft } from "@/lib/validators/draft";
 import type { PromptInputModeValue } from "@/lib/validators/report";
 
@@ -173,6 +173,22 @@ export function buildManualPrompt(input: PromptInput) {
     input.assets.questionnaireText,
     input.assets.quizSummaryJson
   );
+  const quizInsights = deriveQuizInsights(input.assets.quizSummaryJson);
+  const insightLines = [
+    `- Likely skin-type tendency: ${quizInsights.skinTypeHints.join(", ") || "Not enough questionnaire evidence"}`,
+    `- Likely primary concern candidates: ${quizInsights.concernCandidates.join(", ") || "No strong questionnaire-led concerns"}`,
+    `- Secondary support signals: ${quizInsights.secondaryConcernCandidates.join(", ") || "None"}`,
+    `- Texture preferences for products: ${quizInsights.preferredTextures.join(", ") || "Use case judgement"}`,
+    `- Avoid / be cautious with: ${quizInsights.avoidIngredients.join(", ") || "None specifically flagged"}`,
+    `- Provisional rubric score for Acne / Breakouts: ${quizInsights.parameterScores.acneBreakouts} (${quizInsights.parameterBands.acneBreakouts})`,
+    `- Provisional rubric score for Pigmentation / Dark Spots: ${quizInsights.parameterScores.pigmentationDarkSpots} (${quizInsights.parameterBands.pigmentationDarkSpots})`,
+    `- Provisional rubric score for Texture & Pores: ${quizInsights.parameterScores.texturePores} (${quizInsights.parameterBands.texturePores})`,
+    `- Provisional rubric score for Oiliness / Hydration: ${quizInsights.parameterScores.oilinessHydration} (${quizInsights.parameterBands.oilinessHydration})`,
+    `- Provisional rubric score for Sensitivity / Redness: ${quizInsights.parameterScores.sensitivityRedness} (${quizInsights.parameterBands.sensitivityRedness})`,
+    `- Provisional final average from questionnaire only: ${quizInsights.parameterScores.average}`,
+    `- Cleanser style hint: ${quizInsights.cleanserPreference.replaceAll("_", " ")}`,
+    `- Repair active hint: ${quizInsights.repairHeroIngredients.join(", ")} with support from ${quizInsights.repairSupportingIngredients.join(", ")}`
+  ];
   const scanInstruction =
     input.promptInputMode === "scan_assisted"
       ? "Use the front, left, and right facial image references below as primary evidence. If the operator uploads the same images manually in ChatGPT, treat the uploaded files as the final visual input."
@@ -199,6 +215,8 @@ export function buildManualPrompt(input: PromptInput) {
     "Do not ignore the questionnaire. It is authoritative patient context and must be used consistently.",
     "Use all available evidence together: patient metadata, questionnaire, manual notes, scan context, and image references.",
     "Primary concerns must be case-specific. Do not default to pigmentation, uneven tone, acne, or dehydration unless the evidence clearly supports those concerns.",
+    "Use the questionnaire-derived case signals below as a consistency anchor. Only override them when the image evidence or manual findings clearly contradict them.",
+    "Do not let the example JSON, default ingredient patterns, or common dermatology tropes flatten different patients into the same score, same concerns, or same routine.",
     "Different cases with different questionnaire responses and image findings must produce meaningfully different scores, conditions, and concern lists.",
     "Keep primary concerns to the 1 or 2 strongest issues only. Use secondary concerns for weaker or supporting issues.",
     "If the evidence for a concern is weak, do not promote it to primary.",
@@ -260,6 +278,9 @@ export function buildManualPrompt(input: PromptInput) {
     `Visible issues: ${input.assets.visibleIssues.join(", ") || "None provided"}`,
     `Negative findings: ${input.assets.negativeFindings.join(", ") || "None provided"}`,
     `Profile hints: ${input.assets.profileHints.join(", ") || "None provided"}`,
+        "Questionnaire-derived case signals (use as strong but overridable guidance):",
+    insightLines.join("\n"),
+
     `Scan context JSON: ${scanContext}`,
     `Image references in final order (front, left, right): ${imageReferences.join(", ") || "None provided"}`,
     "",

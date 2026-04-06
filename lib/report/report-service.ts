@@ -7,6 +7,7 @@ import { generateValidatedAnalysis } from "@/lib/ai/provider";
 import { sendTelegramMessage } from "@/lib/notifications/telegram";
 import { getCurrentUser } from "@/lib/auth";
 import { DEFAULT_USAGE_AMOUNTS } from "@/lib/report/default-guidance";
+import { deriveQuizInsights } from "@/lib/quiz/summary";
 import { getSkinScoreLabel, normalizeSkinScore } from "@/lib/report/score";
 import {
   formatProductCatalogForPrompt,
@@ -44,84 +45,191 @@ import {
 import type { AnalysisOutput } from "@/lib/validators/analysis";
 import type { ReportDraft } from "@/lib/validators/draft";
 
-function buildDraftFromAnalysis(analysis: AnalysisOutput): ReportDraft {
-  const primaryConcerns = analysis.key_skin_concerns.primary;
-  const secondaryConcerns = analysis.key_skin_concerns.secondary;
+function buildDraftFromAnalysis(analysis: AnalysisOutput, quizSummaryJson?: unknown): ReportDraft {
+  const insights = deriveQuizInsights(quizSummaryJson);
+  const primaryConcerns = Array.from(new Set([
+    ...analysis.key_skin_concerns.primary,
+    ...insights.concernCandidates
+  ])).slice(0, 2);
+  const secondaryConcerns = Array.from(new Set([
+    ...analysis.key_skin_concerns.secondary,
+    ...insights.secondaryConcernCandidates,
+    ...analysis.key_skin_concerns.primary.filter((item) => !primaryConcerns.includes(item))
+  ])).filter((item) => !primaryConcerns.includes(item)).slice(0, 3);
   const mainConcern = primaryConcerns[0] ?? secondaryConcerns[0] ?? "Skin support";
+  const normalizedConcernPool = `${primaryConcerns.join(" ")} ${secondaryConcerns.join(" ")}`.toLowerCase();
+  const isPigmentationLed = /pigmentation|dark spot|melasma/.test(normalizedConcernPool);
+  const isBreakoutLed = /breakout|acne/.test(normalizedConcernPool);
+  const isDrynessLed = /dry|dehydrat|barrier|sensitivity/.test(normalizedConcernPool) || insights.flags.dehydrated || insights.flags.sensitive;
+  const isAgingLed = /aging|wrinkle|texture/.test(normalizedConcernPool) || insights.flags.antiAgingFocus;
+  const cleanserIsFacewash = insights.cleanserPreference === "clarifying_facewash";
+
+  const cleanserPlan = cleanserIsFacewash
+    ? {
+        purpose: "Lift oil, sweat, and congestion gently without triggering rebound dryness.",
+        hero_ingredients: ["Glycerin", "Mild surfactants"],
+        supporting_ingredients: isBreakoutLed ? ["Zinc PCA", "Panthenol"] : ["Panthenol"],
+        notes: "Prefer a clarifying facewash texture because the case shows more oil or breakout tendency."
+      }
+    : insights.cleanserPreference === "gentle_cleanser"
+      ? {
+          purpose: "Cleanse without stripping an already dry, sensitive, or barrier-stressed skin profile.",
+          hero_ingredients: ["Glycerin", "Ceramides"],
+          supporting_ingredients: ["Panthenol", "Betaine"],
+          notes: "Keep the cleanser creamy or lotion-like and avoid foaming harshness."
+        }
+      : {
+          purpose: "Cleanse effectively while keeping the skin balanced and comfortable.",
+          hero_ingredients: ["Glycerin"],
+          supporting_ingredients: ["Panthenol"],
+          notes: "Use a balanced cleanser that the patient can tolerate twice daily."
+        };
+
+  const sunscreenPlan = {
+    purpose: isPigmentationLed
+      ? "Prevent tanning, dark spot worsening, and UV-triggered uneven tone."
+      : "Provide reliable daily UV protection without interfering with adherence.",
+    hero_ingredients: ["Broad-spectrum UV filters"],
+    supporting_ingredients: isPigmentationLed ? ["Iron oxides", "Vitamin E"] : ["Vitamin E"],
+    notes: isPigmentationLed
+      ? "Prefer cosmetically elegant sunscreen use every day because pigmentation control depends on consistency."
+      : "Choose a wearable finish the patient will actually reapply."
+  };
+
+  const moisturizerPlan = isDrynessLed
+    ? {
+        purpose: "Repair barrier weakness, reduce tightness, and retain hydration for longer.",
+        hero_ingredients: ["Ceramides", "Panthenol"],
+        supporting_ingredients: ["Hyaluronic Acid", "Squalane"],
+        notes: "Bias toward lotion or cream textures because this case shows dryness, sensitivity, or AC-related dehydration."
+      }
+    : insights.flags.oily
+      ? {
+          purpose: "Support hydration without a heavy residue that discourages adherence.",
+          hero_ingredients: ["Ceramides"],
+          supporting_ingredients: ["Hyaluronic Acid", "Niacinamide"],
+          notes: "Use light gel-cream or lotion textures for oily or combination-leaning skin."
+        }
+      : {
+          purpose: "Maintain hydration and keep the barrier stable around active treatment use.",
+          hero_ingredients: ["Ceramides"],
+          supporting_ingredients: ["Hyaluronic Acid", "Panthenol"],
+          notes: "Match the moisturizer weight to the patient comfort and climate exposure."
+        };
+
+  const repairPlan = isPigmentationLed
+    ? {
+        purpose: `Target ${mainConcern.toLowerCase()} with a brightening-focused but tolerable corrective active.`,
+        hero_ingredients: insights.repairHeroIngredients,
+        supporting_ingredients: insights.repairSupportingIngredients,
+        notes: insights.flags.sensitive
+          ? "Keep the brightening plan barrier-friendly and avoid stacking too many strong depigmenting actives at once."
+          : "Use pigment-corrective actives consistently and support with sunscreen discipline."
+      }
+    : isBreakoutLed
+      ? {
+          purpose: `Target ${mainConcern.toLowerCase()} with a sebum-balancing and breakout-aware treatment plan.`,
+          hero_ingredients: insights.repairHeroIngredients,
+          supporting_ingredients: insights.repairSupportingIngredients,
+          notes: insights.flags.sensitive
+            ? "Keep acne treatment gentle enough to avoid barrier damage or rebound irritation."
+            : "Use corrective actives that reduce breakouts without making adherence difficult."
+        }
+      : isAgingLed
+        ? {
+            purpose: `Support ${mainConcern.toLowerCase()} with texture-refining and skin-renewal support.`,
+            hero_ingredients: insights.repairHeroIngredients,
+            supporting_ingredients: insights.repairSupportingIngredients,
+            notes: insights.flags.pregnant
+              ? "Avoid retinoid-led treatment and stay with pregnancy-compatible renewal support."
+              : "Bias toward gradual texture refinement over aggressive actives."
+          }
+        : {
+            purpose: `Support ${mainConcern.toLowerCase()} safely and consistently.`,
+            hero_ingredients: insights.repairHeroIngredients,
+            supporting_ingredients: insights.repairSupportingIngredients,
+            notes: insights.flags.sensitive
+              ? "Introduce corrective actives gradually because tolerance may be a limiting factor."
+              : "Keep the repair plan focused on the clearest concern rather than overloading the routine."
+          };
 
   return {
-    analysis,
-    ingredient_plan: {
-      cleanser: {
-        purpose: "Cleanse gently without stripping the barrier.",
-        hero_ingredients: ["Glycerin"],
-        supporting_ingredients: ["Panthenol"],
-        notes: "Keep the cleanser mild and barrier-friendly."
-      },
-      sunscreen: {
-        purpose: "Daily broad-spectrum protection to prevent worsening of concerns.",
-        hero_ingredients: ["Broad-spectrum UV filters"],
-        supporting_ingredients: ["Vitamin E"],
-        notes: "Choose a finish the patient can wear daily."
-      },
-      moisturizer: {
-        purpose: "Restore hydration and barrier comfort.",
-        hero_ingredients: ["Ceramides"],
-        supporting_ingredients: ["Hyaluronic Acid"],
-        notes: "Match the texture to the skin type."
-      },
-      repair_serum: {
-        purpose: `Target ${mainConcern.toLowerCase()} safely and consistently.`,
-        hero_ingredients: ["Niacinamide"],
-        supporting_ingredients: ["Azelaic Acid"],
-        notes: "Introduce corrective actives gradually if sensitivity is suspected."
+    analysis: {
+      ...analysis,
+      key_skin_concerns: {
+        primary: primaryConcerns,
+        secondary: secondaryConcerns
       }
+    },
+    ingredient_plan: {
+      cleanser: cleanserPlan,
+      sunscreen: sunscreenPlan,
+      moisturizer: moisturizerPlan,
+      repair_serum: repairPlan
     },
     routine_plan: {
       morning: [
         {
-          step: "Cleanser",
+          step: cleanserIsFacewash ? "Facewash" : "Cleanser",
           usage_amount: DEFAULT_USAGE_AMOUNTS.cleanser,
-          why: "Remove overnight oil and residue gently."
+          why: cleanserIsFacewash
+            ? "Reduce surface oil and residue without leaving the skin stripped."
+            : "Remove overnight residue while keeping the barrier comfortable."
         },
         {
           step: "Moisturizer",
           usage_amount: DEFAULT_USAGE_AMOUNTS.moisturizer,
-          why: "Support hydration and comfort through the day."
+          why: isDrynessLed
+            ? "Rebuild comfort and hydration before daytime exposure."
+            : "Keep the barrier stable and improve tolerance through the day."
         },
         {
           step: "Sunscreen",
           usage_amount: DEFAULT_USAGE_AMOUNTS.sunscreen,
-          why: "Protect against UV-triggered worsening of skin concerns."
+          why: isPigmentationLed
+            ? "Prevent worsening of dark spots and uneven tone."
+            : "Protect from UV-triggered irritation and long-term damage."
         }
       ],
       night: [
         {
-          step: "Cleanser",
+          step: cleanserIsFacewash ? "Facewash" : "Cleanser",
           usage_amount: DEFAULT_USAGE_AMOUNTS.cleanser,
-          why: "Prepare the skin for treatment products."
+          why: "Prepare the skin for treatment without increasing irritation."
         },
         {
-          step: "Repair serum",
-          usage_amount: DEFAULT_USAGE_AMOUNTS.serum,
-          why: `Address ${mainConcern.toLowerCase()} with a targeted active.`
+          step: isPigmentationLed || isBreakoutLed || isAgingLed ? "Repair serum" : "Barrier treatment",
+          usage_amount: isDrynessLed && !isPigmentationLed && !isBreakoutLed && !isAgingLed
+            ? DEFAULT_USAGE_AMOUNTS.repairCream
+            : DEFAULT_USAGE_AMOUNTS.serum,
+          why: `Address ${mainConcern.toLowerCase()} with the most relevant targeted step in the routine.`
         },
         {
           step: "Moisturizer",
           usage_amount: DEFAULT_USAGE_AMOUNTS.moisturizer,
-          why: "Reduce dryness and support tolerance."
+          why: isDrynessLed
+            ? "Seal hydration and reduce overnight tightness or reactivity."
+            : "Support tolerance around the active step and keep the barrier steady."
         }
       ]
     },
     product_matching: {
-      target_concerns: [...primaryConcerns, ...secondaryConcerns],
-      avoid_ingredients: [],
-      preferred_textures: analysis.primary_observations.oil_levels === "High" ? ["Gel", "Fluid"] : ["Lotion", "Cream"],
-      notes: "Use higher suitability products that support the drafted ingredients."
+      target_concerns: Array.from(new Set([...primaryConcerns, ...secondaryConcerns, ...insights.concernCandidates])).slice(0, 5),
+      avoid_ingredients: insights.avoidIngredients,
+      preferred_textures: Array.from(new Set([
+        ...insights.preferredTextures,
+        ...(analysis.primary_observations.oil_levels === "High" ? ["Gel", "Fluid"] : []),
+        ...(analysis.primary_observations.hydration === "Low" ? ["Lotion", "Cream"] : [])
+      ])).slice(0, 4),
+      notes: `Prioritize products that fit the dominant case pattern: ${Array.from(new Set([...primaryConcerns, ...insights.concernCandidates])).join(", ")}.`
     },
     doctor_handoff: {
-      summary: "Review the suggested ingredient stack, routine frequency, and product fit before approval.",
-      review_focus: ["Tolerance", "Practical adherence", "Contraindications"]
+      summary: `Questionnaire-driven case signals suggest ${Array.from(new Set([...primaryConcerns, ...secondaryConcerns])).join(", ")} with a likely ${insights.skinTypeHints[0] ?? analysis.overall_skin_profile.skin_type.toLowerCase()} tendency. Review final fit, tolerance, and practicality before approval.`,
+      review_focus: Array.from(new Set([
+        insights.flags.sensitive ? "Sensitivity / tolerance" : "Tolerance",
+        insights.flags.pregnant ? "Pregnancy-safe actives" : "Contraindications",
+        isPigmentationLed ? "Sunscreen adherence" : "Practical adherence"
+      ]))
     }
   };
 }
@@ -611,7 +719,7 @@ async function buildDraftAndSource(input: CreateReportInputDto, promptText: stri
   }
 
   if (input.analysisOverride) {
-    const draft = normalizeDraftScore(buildDraftFromAnalysis(input.analysisOverride));
+    const draft = normalizeDraftScore(buildDraftFromAnalysis(input.analysisOverride, input.assets.quizSummaryJson));
     return {
       draft,
       rawResponseText: JSON.stringify(draft, null, 2),
@@ -621,7 +729,7 @@ async function buildDraftAndSource(input: CreateReportInputDto, promptText: stri
   }
 
   const analysisResult = await generateValidatedAnalysis(input);
-  const draft = normalizeDraftScore(buildDraftFromAnalysis(analysisResult.analysis));
+  const draft = normalizeDraftScore(buildDraftFromAnalysis(analysisResult.analysis, input.assets.quizSummaryJson));
 
   return {
     draft,
@@ -990,11 +1098,11 @@ export async function updateDoctorReview(
   }
 
   const catalog = analysisOverride ? await prisma.productCatalog.findMany() : [];
-  const rerankedMatches = analysisOverride
+  const rerankedMatches: ReturnType<typeof rankProductsForDraft> | null = analysisOverride
     ? rankProductsForDraft({
         patientSkinType: analysisOverride.skinType,
         quizSummaryJson: existingReport.assets?.quizSummaryJson ?? undefined,
-        draft: normalizeDraftScore(buildDraftFromAnalysis(buildAnalysisFromDoctorOverride(analysisOverride))),
+        draft: normalizeDraftScore(buildDraftFromAnalysis(buildAnalysisFromDoctorOverride(analysisOverride), existingReport.assets?.quizSummaryJson ?? undefined)),
         catalog
       })
     : null;
