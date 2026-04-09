@@ -464,3 +464,49 @@ export async function updateSupabaseQuizResultReport(args: {
     `Supabase quiz_results update failed: no row matched ${args.quizResultId} in columns ${getQuizResultsMatchColumns().join(", ")}`
   );
 }
+
+export async function updateSupabaseQuizResultFields(args: {
+  quizResultId: string;
+  fields: {
+    do_this?: unknown;
+    not_that?: unknown;
+    morning_routine?: unknown;
+    night_routine?: unknown;
+    over_all_skin_profile?: unknown;
+    key_skin_concerns?: unknown;
+    positive_findings?: unknown;
+    primary_observations?: unknown;
+    doctor_notes?: string | null;
+  };
+}) {
+  const supabase = getSupabaseAdminClient();
+  const table = getQuizResultsTableName();
+
+  let lastError: string | null = null;
+
+  for (const matchColumn of getQuizResultsMatchColumns()) {
+    const { data, error } = await supabase
+      .from(table)
+      .update(args.fields)
+      .eq(matchColumn, args.quizResultId)
+      .select(matchColumn)
+      .maybeSingle();
+
+    if (error) {
+      lastError = `${matchColumn}: ${error.message}`;
+      continue;
+    }
+
+    if (data) {
+      return;
+    }
+  }
+
+  if (lastError) {
+    throw new Error(`Supabase quiz_results field update failed: ${lastError}`);
+  }
+
+  throw new Error(
+    `Supabase quiz_results field update failed: no row matched ${args.quizResultId} in columns ${getQuizResultsMatchColumns().join(", ")}`
+  );
+}

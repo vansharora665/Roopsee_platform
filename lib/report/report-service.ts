@@ -34,6 +34,7 @@ import {
   extractStoredScanUrls,
   getSyncedProfileById,
   listSupabaseProductMetadata,
+  updateSupabaseQuizResultFields,
   updateSupabaseQuizResultReport,
   updateSupabaseUserProducts
 } from "@/lib/supabase/profile-service";
@@ -635,6 +636,64 @@ function toAbsoluteReportUrl(pdfUrl: string | null | undefined) {
   return `${appUrl.replace(/\/$/, "")}${pdfUrl}`;
 }
 
+function compactUniqueStrings(values: string[]) {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function serializeRoutineForSupabase(
+  items: Array<{
+    step: string;
+    usageAmount: string;
+  }>
+) {
+  return compactUniqueStrings(
+    items.map((item) => {
+      const step = item.step.trim();
+      const usageAmount = item.usageAmount.trim();
+
+      if (!step && !usageAmount) {
+        return "";
+      }
+
+      if (!step) {
+        return usageAmount;
+      }
+
+      if (!usageAmount) {
+        return step;
+      }
+
+      return `${step}, ${usageAmount}`;
+    })
+  );
+}
+
+function buildApprovedQuizResultFields(report: ReportDetailDto) {
+  return {
+    do_this: compactUniqueStrings(report.doctorReview.doThis),
+    not_that: compactUniqueStrings(report.doctorReview.notThat),
+    morning_routine: serializeRoutineForSupabase(report.doctorReview.morningRoutine),
+    night_routine: serializeRoutineForSupabase(report.doctorReview.nightRoutine),
+    over_all_skin_profile: {
+      skin_type: report.analysisOutput.skinType,
+      condition: report.analysisOutput.condition,
+      overall_severity: report.analysisOutput.overallSeverity
+    },
+    key_skin_concerns: {
+      primary: compactUniqueStrings(report.analysisOutput.primaryConcerns),
+      secondary: compactUniqueStrings(report.analysisOutput.secondaryConcerns)
+    },
+    positive_findings: compactUniqueStrings(report.analysisOutput.positiveFindings),
+    primary_observations: {
+      oil_levels: report.analysisOutput.oilLevels,
+      hydration: report.analysisOutput.hydration,
+      texture: report.analysisOutput.texture,
+      tone: report.analysisOutput.tone
+    },
+    doctor_notes: report.doctorReview.doctorNotes?.trim() || null
+  };
+}
+
 async function syncApprovedProductsToSupabase(report: ReportDetailDto) {
   const userId = getSupabaseUserId(report);
   const userEmail = getSupabaseUserEmail(report);
@@ -647,6 +706,19 @@ async function syncApprovedProductsToSupabase(report: ReportDetailDto) {
     userId,
     userEmail,
     products: await buildApprovedProductsPayload(report)
+  });
+}
+
+async function syncApprovedReportFieldsToSupabase(report: ReportDetailDto) {
+  const quizResultId = getSupabaseQuizResultId(report);
+
+  if (!quizResultId) {
+    return;
+  }
+
+  await updateSupabaseQuizResultFields({
+    quizResultId,
+    fields: buildApprovedQuizResultFields(report)
   });
 }
 
@@ -1249,6 +1321,7 @@ export async function approveReport(reportId: string) {
   });
 
   const serializedReport = serializeReport(report);
+  await syncApprovedReportFieldsToSupabase(serializedReport);
   await syncApprovedProductsToSupabase(serializedReport);
   await sendTelegramMessage(`doctor has approved ${serializedReport.patientInfo.name} report`);
 
