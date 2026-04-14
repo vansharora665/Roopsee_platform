@@ -39,9 +39,17 @@ export default async function ReportsPage({
             and generate the fixed patient PDF only after the doctor has signed off.
           </p>
         </div>
-        <Link href="/reports/new">
-          <Button>Create new intake</Button>
-        </Link>
+        <div className="flex flex-wrap gap-3">
+          <Link href="/dashboard">
+            <Button variant="secondary">Business funnel</Button>
+          </Link>
+          <Link href="/follow-ups">
+            <Button variant="secondary">Follow-ups</Button>
+          </Link>
+          <Link href="/reports/new">
+            <Button>Create new intake</Button>
+          </Link>
+        </div>
       </Card>
 
       <div className="flex flex-wrap gap-3">

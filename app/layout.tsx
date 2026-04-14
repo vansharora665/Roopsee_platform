@@ -32,11 +32,24 @@ export default async function RootLayout({
                   Dermatologist workflow MVP for structured skin analysis reports
                 </p>
               </div>
-              <div className="text-right text-sm text-slate-600">
-                <p className="font-medium text-slate-900">
-                  {currentUser?.name ?? "Demo doctor session"}
-                </p>
-                <p>{currentUser?.email ?? "doctor@roopsee.local"}</p>
+              <div className="flex flex-col items-end gap-3">
+                <nav className="flex flex-wrap justify-end gap-2 text-sm font-semibold">
+                  <Link className="rounded-full bg-slate-100 px-3 py-1.5 text-slate-700 hover:bg-slate-200" href="/dashboard">
+                    Funnel
+                  </Link>
+                  <Link className="rounded-full bg-slate-100 px-3 py-1.5 text-slate-700 hover:bg-slate-200" href="/reports">
+                    Reports
+                  </Link>
+                  <Link className="rounded-full bg-slate-100 px-3 py-1.5 text-slate-700 hover:bg-slate-200" href="/follow-ups">
+                    Follow-ups
+                  </Link>
+                </nav>
+                <div className="text-right text-sm text-slate-600">
+                  <p className="font-medium text-slate-900">
+                    {currentUser?.name ?? "Demo doctor session"}
+                  </p>
+                  <p>{currentUser?.email ?? "doctor@roopsee.local"}</p>
+                </div>
               </div>
             </div>
           </header>
