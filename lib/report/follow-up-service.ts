@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
 import { reportInclude, serializeReport, type ReportRecord } from "@/lib/report/mappers";
-import type { ReportDetailDto, SyncedProfileDto } from "@/lib/report/types";
+import type { DoctorProductRowDto, ProductSlotDto, ReportDetailDto, SyncedProfileDto } from "@/lib/report/types";
 import { syncSupabaseProfiles } from "@/lib/supabase/profile-service";
 
 type FollowUpReportListItem = {
@@ -11,11 +11,7 @@ type FollowUpReportListItem = {
   createdAt: string;
   approvedAt: string | null;
   pdfUrl: string | null;
-  products: Array<{
-    title: string;
-    brand: string | null;
-    productName: string | null;
-  }>;
+  products: DoctorProductRowDto[];
 };
 
 export type FollowUpCustomerDto = {
@@ -28,22 +24,52 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function productRowsFromJson(value: Prisma.JsonValue | null | undefined): FollowUpReportListItem["products"] {
+function productRowsFromJson(value: Prisma.JsonValue | null | undefined): DoctorProductRowDto[] {
   if (!Array.isArray(value)) {
     return [];
   }
 
-  return value.flatMap((item) => {
+  return value.flatMap((item, index) => {
     if (!isRecord(item)) {
       return [];
     }
 
+    const id = typeof item.id === "string" && item.id.trim() ? item.id : `follow-up-product-${index + 1}`;
     const title = typeof item.title === "string" ? item.title : "Product";
+    const slot = typeof item.slot === "string" ? (item.slot as ProductSlotDto) : null;
+    const productCatalogId = typeof item.productCatalogId === "string" ? item.productCatalogId : null;
     const brand = typeof item.brand === "string" ? item.brand : null;
+    const company = typeof item.company === "string" ? item.company : brand;
     const productName = typeof item.productName === "string" ? item.productName : null;
 
-    return [{ title, brand, productName }];
+    return [{ id, title, slot, productCatalogId, brand, company, productName }];
   });
+}
+
+function rowsForSlot(rows: DoctorProductRowDto[], slot: ProductSlotDto) {
+  return rows.find((row) => row.slot === slot) ?? null;
+}
+
+function buildLegacyProductFields(rows: DoctorProductRowDto[]) {
+  const cleanser = rowsForSlot(rows, "cleanser");
+  const sunscreen = rowsForSlot(rows, "sunscreen");
+  const moisturizer = rowsForSlot(rows, "moisturizer");
+  const repairSerum = rowsForSlot(rows, "repair_serum");
+
+  return {
+    cleanserBrand: cleanser?.brand ?? null,
+    cleanserCompany: cleanser?.company ?? cleanser?.brand ?? null,
+    cleanserProductName: cleanser?.productName ?? null,
+    sunscreenBrand: sunscreen?.brand ?? null,
+    sunscreenCompany: sunscreen?.company ?? sunscreen?.brand ?? null,
+    sunscreenProductName: sunscreen?.productName ?? null,
+    moisturizerBrand: moisturizer?.brand ?? null,
+    moisturizerCompany: moisturizer?.company ?? moisturizer?.brand ?? null,
+    moisturizerProductName: moisturizer?.productName ?? null,
+    repairSerumBrand: repairSerum?.brand ?? null,
+    repairSerumCompany: repairSerum?.company ?? repairSerum?.brand ?? null,
+    repairSerumProductName: repairSerum?.productName ?? null
+  };
 }
 
 export async function listFollowUpCustomers(): Promise<FollowUpCustomerDto[]> {
@@ -94,7 +120,10 @@ export async function listFollowUpCustomers(): Promise<FollowUpCustomerDto[]> {
   });
 }
 
-export async function createFollowUpReport(syncedProfileId: string): Promise<ReportDetailDto> {
+export async function createFollowUpReport(
+  syncedProfileId: string,
+  productRowsOverride?: DoctorProductRowDto[]
+): Promise<ReportDetailDto> {
   const previousReport = await prisma.report.findFirst({
     where: {
       syncedProfileId,
@@ -115,6 +144,11 @@ export async function createFollowUpReport(syncedProfileId: string): Promise<Rep
   if (!previousReport?.patientInfo || !previousReport.assets || !previousReport.analysisOutput || !previousReport.doctorReview) {
     throw new Error("No previous report is available for this follow-up");
   }
+
+  const productRows = productRowsOverride && productRowsOverride.length > 0
+    ? productRowsOverride
+    : productRowsFromJson(previousReport.doctorReview.productRows);
+  const legacyProductFields = buildLegacyProductFields(productRows);
 
   const created = await prisma.report.create({
     data: {
@@ -195,19 +229,8 @@ export async function createFollowUpReport(syncedProfileId: string): Promise<Rep
       },
       doctorReview: {
         create: {
-          cleanserBrand: previousReport.doctorReview.cleanserBrand,
-          cleanserCompany: previousReport.doctorReview.cleanserCompany,
-          cleanserProductName: previousReport.doctorReview.cleanserProductName,
-          sunscreenBrand: previousReport.doctorReview.sunscreenBrand,
-          sunscreenCompany: previousReport.doctorReview.sunscreenCompany,
-          sunscreenProductName: previousReport.doctorReview.sunscreenProductName,
-          moisturizerBrand: previousReport.doctorReview.moisturizerBrand,
-          moisturizerCompany: previousReport.doctorReview.moisturizerCompany,
-          moisturizerProductName: previousReport.doctorReview.moisturizerProductName,
-          repairSerumBrand: previousReport.doctorReview.repairSerumBrand,
-          repairSerumCompany: previousReport.doctorReview.repairSerumCompany,
-          repairSerumProductName: previousReport.doctorReview.repairSerumProductName,
-          productRows: (previousReport.doctorReview.productRows ?? []) as Prisma.InputJsonValue,
+          ...legacyProductFields,
+          productRows: productRows as Prisma.InputJsonValue,
           morningRoutine: (previousReport.doctorReview.morningRoutine ?? []) as Prisma.InputJsonValue,
           nightRoutine: (previousReport.doctorReview.nightRoutine ?? []) as Prisma.InputJsonValue,
           doThis: (previousReport.doctorReview.doThis ?? []) as Prisma.InputJsonValue,

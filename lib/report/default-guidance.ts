@@ -19,7 +19,16 @@ export const DO_THIS_OPTIONS = [
   "Product Expectations: Allow 6-8 weeks to see initial results.",
   "Product Expectations: For proper results, continue at least for 3-4 months.",
   "Hygiene Tips: Change and wash pillowcases and towels regularly.",
-  "Hygiene Tips: Keep hair and hands off the face to avoid transferring oil and bacteria."
+  "Hygiene Tips: Keep hair and hands off the face to avoid transferring oil and bacteria.",
+  "Lip Care: Apply lip balm underneath before lipstick.",
+  "Lip Care: Remove lipstick gently at night.",
+  "Lip Care: Use SPF lip balm during the day.",
+  "Eye Care: Use sunscreen around the eyes.",
+  "Eye Care: Be gentle with your eyes. Always dab, do not rub, and use the ring finger for application.",
+  "Screen Care: Follow the 20-20-20 rule. Every 20 minutes, look 20 feet away for 20 seconds to reduce eye strain.",
+  "Body Care: Shower after sweating, especially after workouts, to prevent body acne and odour.",
+  "Body Care: Wear breathable fabrics. Prefer cotton or loose clothing to reduce sweat buildup and irritation.",
+  "Body Care: Maintain hygiene in problem areas like underarms, back, and inner thighs to prevent infections and pigmentation."
 ] as const;
 
 export const NOT_THAT_OPTIONS = [
@@ -33,5 +42,11 @@ export const NOT_THAT_OPTIONS = [
   "Expectations and Consistency: Continue the maintenance routine even after improvement.",
   "Lifestyle Triggers: Limit sugar, processed foods, and dairy if they trigger acne.",
   "Lifestyle Triggers: Avoid excess heat exposure such as hot environments and saunas because it can worsen inflammation and pigmentation.",
-  "Safety: Avoid strong peels or bleaching agents without expert advice."
+  "Safety: Avoid strong peels or bleaching agents without expert advice.",
+  "Lip Care: Avoid using matte lipstick every single day.",
+  "Eye Care: Do not rub your eyes frequently.",
+  "Eye Care: Do not apply face creams too close to the eyes.",
+  "Body Care: Do not use very hot water for showers because it strips natural oils and causes dryness and irritation.",
+  "Body Care: Do not neglect sunscreen on the body. The face is not the only area that needs protection.",
+  "Body Care: Do not wear tight, sweaty clothes for long because it increases risk of body acne and fungal infections."
 ] as const;
