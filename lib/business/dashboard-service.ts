@@ -37,8 +37,27 @@ export type BusinessDashboardData = {
   warnings: string[];
 };
 
-function tableName(envName: string, fallback: string) {
-  return process.env[envName]?.trim() || fallback;
+function dashboardUsersTable() {
+  return process.env.SUPABASE_DASHBOARD_USERS_TABLE?.trim()
+    || process.env.SUPABASE_USERS_TABLE?.trim()
+    || "users";
+}
+
+function dashboardMasterTable() {
+  return process.env.SUPABASE_DASHBOARD_MASTER_TABLE?.trim()
+    || "master_user_quiz";
+}
+
+function dashboardQuizResultsTable() {
+  return process.env.SUPABASE_DASHBOARD_QUIZ_RESULTS_TABLE?.trim()
+    || process.env.SUPABASE_REPORTS_TABLE?.trim()
+    || "quiz_results";
+}
+
+function dashboardOrdersTable() {
+  return process.env.SUPABASE_DASHBOARD_ORDERS_TABLE?.trim()
+    || process.env.SUPABASE_ORDERS_TABLE?.trim()
+    || "orders";
 }
 
 function readString(value: unknown) {
@@ -60,41 +79,78 @@ function readDateLike(value: unknown) {
     return null;
   }
 
-  const date = new Date(raw);
-  return Number.isNaN(date.getTime()) ? raw : date.toISOString();
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
-function recordKey(row: SupabaseRow) {
-  return (
-    readString(row.user_id) ||
-    readString(row.quiz_user_id) ||
-    readString(row.id) ||
-    readString(row.email) ||
-    readString(row.phone_no) ||
-    null
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function keyCandidates(row: SupabaseRow) {
+  return Array.from(
+    new Set(
+      [
+        readString(row.id),
+        readString(row.user_id),
+        readString(row.quiz_user_id),
+        readString(row.quiz_result_id),
+        readString(row.email),
+        readString(row.phone_no),
+        readString(row.phone)
+      ].filter((value): value is string => Boolean(value))
+    )
   );
 }
 
-function quizResultId(row: SupabaseRow) {
+function primaryKey(row: SupabaseRow) {
+  return (
+    readString(row.user_id)
+    || readString(row.quiz_user_id)
+    || readString(row.id)
+    || readString(row.email)
+    || readString(row.phone_no)
+    || readString(row.phone)
+    || null
+  );
+}
+
+function extractQuizResultId(row: SupabaseRow) {
   return readString(row.quiz_result_id) || readString(row.id);
 }
 
-function hasScan(row: SupabaseRow) {
+function extractUserId(row: SupabaseRow) {
+  return readString(row.user_id) || readString(row.quiz_user_id) || readString(row.id);
+}
+
+function extractUserQuizCompletedAt(row: SupabaseRow) {
+  if (!isRecord(row.skin_quiz)) {
+    return null;
+  }
+
+  return readDateLike(row.skin_quiz.completed_at);
+}
+
+function hasUserQuiz(row: SupabaseRow) {
+  return isRecord(row.skin_quiz) && (Boolean(row.skin_quiz.answers) || Boolean(row.skin_quiz.completed_at));
+}
+
+function hasScans(row: SupabaseRow) {
   return Boolean(readString(row.image_url) || readString(row.image_url_left) || readString(row.image_url_right));
 }
 
-function hasReportUrl(row: SupabaseRow) {
+function hasQuizResultReport(row: SupabaseRow) {
   return Boolean(readString(row.reports));
 }
 
 function latestDate(values: Array<string | null | undefined>) {
-  const dated = values
+  const timestamps = values
     .filter((value): value is string => Boolean(value))
     .map((value) => new Date(value))
     .filter((value) => !Number.isNaN(value.getTime()))
-    .sort((a, b) => b.getTime() - a.getTime());
+    .sort((left, right) => right.getTime() - left.getTime());
 
-  return dated[0]?.toISOString() ?? null;
+  return timestamps[0]?.toISOString() ?? null;
 }
 
 async function readSupabaseTable(table: string, limit = 1000) {
@@ -108,27 +164,35 @@ async function readSupabaseTable(table: string, limit = 1000) {
   return (data ?? []) as SupabaseRow[];
 }
 
+type LocalReportSnapshot = {
+  id: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  pdfUrl: string | null;
+  keys: string[];
+};
+
+function uniqueCount(values: Array<string | null | undefined>) {
+  return new Set(values.filter((value): value is string => Boolean(value))).size;
+}
+
 export async function getBusinessDashboardData(): Promise<BusinessDashboardData> {
   const warnings: string[] = [];
-  const masterTable = tableName("SUPABASE_PROFILES_TABLE", "master_user_quiz");
-  const usersTable = tableName("SUPABASE_USERS_TABLE", "users");
-  const quizResultsTable = tableName("SUPABASE_REPORTS_TABLE", "quiz_results");
-  const ordersTable = tableName("SUPABASE_ORDERS_TABLE", "orders");
-
-  const [masterRows, userRows, quizResultRows, orderRows, reports] = await Promise.all([
-    readSupabaseTable(masterTable).catch((error: Error) => {
+  const [userRows, masterRows, quizResultRows, orderRows, localReportsRaw] = await Promise.all([
+    readSupabaseTable(dashboardUsersTable()).catch((error: Error) => {
       warnings.push(error.message);
       return [] as SupabaseRow[];
     }),
-    readSupabaseTable(usersTable).catch((error: Error) => {
+    readSupabaseTable(dashboardMasterTable()).catch((error: Error) => {
       warnings.push(error.message);
       return [] as SupabaseRow[];
     }),
-    readSupabaseTable(quizResultsTable).catch((error: Error) => {
+    readSupabaseTable(dashboardQuizResultsTable()).catch((error: Error) => {
       warnings.push(error.message);
       return [] as SupabaseRow[];
     }),
-    readSupabaseTable(ordersTable).catch((error: Error) => {
+    readSupabaseTable(dashboardOrdersTable()).catch((error: Error) => {
       warnings.push(error.message);
       return [] as SupabaseRow[];
     }),
@@ -144,129 +208,208 @@ export async function getBusinessDashboardData(): Promise<BusinessDashboardData>
     })
   ]);
 
-  const quizRowsById = new Map<string, SupabaseRow>();
-  for (const row of quizResultRows) {
-    const key = recordKey(row);
-    const resultId = quizResultId(row);
+  const userRowsFiltered = userRows.filter((row) => {
+    const role = readString(row.role);
+    return !role || role.toLowerCase() === "user";
+  });
 
-    if (key) {
-      quizRowsById.set(key, row);
-    }
+  const localReports: LocalReportSnapshot[] = localReportsRaw.map((report) => {
+    const profileJson = isRecord(report.syncedProfile?.profileJson)
+      ? (report.syncedProfile?.profileJson as Record<string, unknown>)
+      : {};
 
-    if (resultId) {
-      quizRowsById.set(resultId, row);
-    }
-  }
+    const keys = Array.from(
+      new Set(
+        [
+          report.syncedProfile?.externalId,
+          report.syncedProfile?.email,
+          report.patientInfo?.name,
+          readString(profileJson.user_id),
+          readString(profileJson.quiz_user_id),
+          readString(profileJson.quiz_result_id),
+          readString(profileJson.email)
+        ].filter((value): value is string => Boolean(value))
+      )
+    );
 
-  const userRowsByKey = new Map<string, SupabaseRow>();
-  for (const row of userRows) {
-    const key = recordKey(row);
-    const email = readString(row.email);
+    return {
+      id: report.id,
+      status: report.status,
+      createdAt: report.createdAt.toISOString(),
+      updatedAt: report.updatedAt.toISOString(),
+      pdfUrl: report.generatedFile?.pdfUrl ?? null,
+      keys
+    };
+  });
 
-    if (key) {
-      userRowsByKey.set(key, row);
-    }
-
-    if (email) {
-      userRowsByKey.set(email, row);
-    }
-  }
-
-  const ordersByKey = new Set<string>();
-  for (const row of orderRows) {
-    for (const value of [recordKey(row), readString(row.user_id), readString(row.userId), readString(row.email)]) {
-      if (value) {
-        ordersByKey.add(value);
-      }
-    }
-  }
-
-  const localReportsByKey = new Map<string, typeof reports>();
-  for (const report of reports) {
-    const keys = [
-      report.syncedProfile?.externalId,
-      report.syncedProfile?.email,
-      report.patientInfo?.name
-    ].filter((value): value is string => Boolean(value));
-
-    for (const key of keys) {
-      const existing = localReportsByKey.get(key) ?? [];
+  const reportsByKey = new Map<string, LocalReportSnapshot[]>();
+  for (const report of localReports) {
+    for (const key of report.keys) {
+      const existing = reportsByKey.get(key) ?? [];
       existing.push(report);
-      localReportsByKey.set(key, existing);
+      reportsByKey.set(key, existing);
     }
   }
 
-  const customerRows = new Map<string, FunnelCustomerRow>();
+  const quizResultsByKey = new Map<string, SupabaseRow>();
+  for (const row of quizResultRows) {
+    for (const key of keyCandidates(row)) {
+      quizResultsByKey.set(key, row);
+    }
+  }
 
-  function upsertCustomer(row: SupabaseRow, source: "master" | "user") {
-    const key = recordKey(row) || readString(row.email) || readString(row.name);
-    if (!key) {
+  const ordersByKey = new Map<string, SupabaseRow[]>();
+  for (const row of orderRows) {
+    for (const key of keyCandidates(row)) {
+      const existing = ordersByKey.get(key) ?? [];
+      existing.push(row);
+      ordersByKey.set(key, existing);
+    }
+  }
+
+  const customers = new Map<string, FunnelCustomerRow>();
+
+  function mergeCustomer(seedKey: string, partial: Partial<FunnelCustomerRow>) {
+    const existing = customers.get(seedKey);
+    const next: FunnelCustomerRow = {
+      key: seedKey,
+      name: partial.name ?? existing?.name ?? "Unnamed customer",
+      email: partial.email ?? existing?.email ?? null,
+      phone: partial.phone ?? existing?.phone ?? null,
+      userId: partial.userId ?? existing?.userId ?? null,
+      quizResultId: partial.quizResultId ?? existing?.quizResultId ?? null,
+      signedIn: Boolean(partial.signedIn || existing?.signedIn),
+      quizSubmitted: Boolean(partial.quizSubmitted || existing?.quizSubmitted),
+      scansUploaded: Boolean(partial.scansUploaded || existing?.scansUploaded),
+      draftGenerated: Boolean(partial.draftGenerated || existing?.draftGenerated),
+      reportApproved: Boolean(partial.reportApproved || existing?.reportApproved),
+      pdfGenerated: Boolean(partial.pdfGenerated || existing?.pdfGenerated),
+      ordered: Boolean(partial.ordered || existing?.ordered),
+      latestReportId: partial.latestReportId ?? existing?.latestReportId ?? null,
+      latestReportStatus: partial.latestReportStatus ?? existing?.latestReportStatus ?? null,
+      latestPdfUrl: partial.latestPdfUrl ?? existing?.latestPdfUrl ?? null,
+      lastActivityAt: latestDate([partial.lastActivityAt, existing?.lastActivityAt])
+    };
+
+    customers.set(seedKey, next);
+  }
+
+  function relatedKeyList(row: SupabaseRow) {
+    return Array.from(new Set([...keyCandidates(row), extractUserId(row), extractQuizResultId(row)].filter((value): value is string => Boolean(value))));
+  }
+
+  function attachSupabaseRow(row: SupabaseRow, source: "users" | "master" | "quiz_results" | "orders") {
+    const keys = relatedKeyList(row);
+    const seedKey = primaryKey(row);
+    if (!seedKey) {
       return;
     }
 
-    const email = readString(row.email);
-    const userId = readString(row.user_id) || readString(row.quiz_user_id) || (source === "user" ? readString(row.id) : null);
-    const resultId = quizResultId(row);
-    const linkedQuizRow = resultId ? quizRowsById.get(resultId) : userId ? quizRowsById.get(userId) : null;
-    const localReports = [
-      ...(localReportsByKey.get(resultId ?? "") ?? []),
-      ...(localReportsByKey.get(userId ?? "") ?? []),
-      ...(localReportsByKey.get(email ?? "") ?? [])
-    ];
-    const latestReport = localReports.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0] ?? null;
-    const existing = customerRows.get(key);
+    const linkedReports = keys.flatMap((key) => reportsByKey.get(key) ?? []);
+    const latestReport = linkedReports.sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime())[0] ?? null;
+    const linkedQuizResult = keys.map((key) => quizResultsByKey.get(key)).find(Boolean) ?? null;
+    const linkedOrders = keys.flatMap((key) => ordersByKey.get(key) ?? []);
 
-    customerRows.set(key, {
-      key,
-      name: readString(row.name) || readString(row.full_name) || existing?.name || "Unnamed customer",
-      email: email ?? existing?.email ?? null,
-      phone: readString(row.phone_no) ?? readString(row.phone) ?? existing?.phone ?? null,
-      userId: userId ?? existing?.userId ?? null,
-      quizResultId: resultId ?? existing?.quizResultId ?? null,
-      signedIn: existing?.signedIn || source === "user" || Boolean(userId || email),
-      quizSubmitted: existing?.quizSubmitted || source === "master" || Boolean(row.answers || linkedQuizRow),
-      scansUploaded: existing?.scansUploaded || hasScan(row),
-      draftGenerated: existing?.draftGenerated || localReports.length > 0,
-      reportApproved: existing?.reportApproved || localReports.some((report) => report.status === "approved" || report.status === "sent_to_user"),
-      pdfGenerated: existing?.pdfGenerated || localReports.some((report) => Boolean(report.generatedFile?.pdfUrl)) || Boolean(linkedQuizRow && hasReportUrl(linkedQuizRow)),
-      ordered: existing?.ordered || [key, userId, email].some((value) => Boolean(value && ordersByKey.has(value))),
-      latestReportId: latestReport?.id ?? existing?.latestReportId ?? null,
-      latestReportStatus: latestReport?.status ?? existing?.latestReportStatus ?? null,
-      latestPdfUrl: latestReport?.generatedFile?.pdfUrl ?? (linkedQuizRow ? readString(linkedQuizRow.reports) : null) ?? existing?.latestPdfUrl ?? null,
+    mergeCustomer(seedKey, {
+      name: readString(row.name) ?? readString(row.full_name) ?? undefined,
+      email: readString(row.email),
+      phone: readString(row.phone_no) ?? readString(row.phone),
+      userId: extractUserId(row),
+      quizResultId: extractQuizResultId(row),
+      signedIn: source === "users",
+      quizSubmitted:
+        source === "master"
+        || source === "quiz_results"
+        || (source === "users" && hasUserQuiz(row))
+        || Boolean(linkedQuizResult),
+      scansUploaded:
+        hasScans(row)
+        || Boolean(linkedQuizResult && hasScans(linkedQuizResult)),
+      draftGenerated: linkedReports.length > 0,
+      reportApproved: linkedReports.some((report) => report.status === "approved" || report.status === "sent_to_user"),
+      pdfGenerated:
+        linkedReports.some((report) => Boolean(report.pdfUrl))
+        || Boolean(linkedQuizResult && hasQuizResultReport(linkedQuizResult)),
+      ordered: source === "orders" || linkedOrders.length > 0,
+      latestReportId: latestReport?.id ?? null,
+      latestReportStatus: latestReport?.status ?? null,
+      latestPdfUrl: latestReport?.pdfUrl ?? (linkedQuizResult ? readString(linkedQuizResult.reports) : null) ?? null,
       lastActivityAt: latestDate([
-        latestReport?.updatedAt.toISOString(),
+        latestReport?.updatedAt,
         readDateLike(row.updated_at),
+        readDateLike(row.created_at),
         readDateLike(row.completed_at),
-        existing?.lastActivityAt
+        source === "users" ? extractUserQuizCompletedAt(row) : null,
+        linkedQuizResult ? readDateLike(linkedQuizResult.completed_at) : null,
+        linkedOrders[0] ? readDateLike(linkedOrders[0].created_at) : null
       ])
     });
   }
 
-  for (const row of userRows) {
-    upsertCustomer(row, "user");
+  for (const row of userRowsFiltered) {
+    attachSupabaseRow(row, "users");
   }
 
   for (const row of masterRows) {
-    upsertCustomer(row, "master");
+    attachSupabaseRow(row, "master");
   }
 
-  const customers = Array.from(customerRows.values()).sort((a, b) => {
-    const aDate = a.lastActivityAt ? new Date(a.lastActivityAt).getTime() : 0;
-    const bDate = b.lastActivityAt ? new Date(b.lastActivityAt).getTime() : 0;
-    return bDate - aDate;
+  for (const row of quizResultRows) {
+    attachSupabaseRow(row, "quiz_results");
+  }
+
+  for (const row of orderRows) {
+    attachSupabaseRow(row, "orders");
+  }
+
+  for (const report of localReports) {
+    const key = report.keys[0];
+    if (!key) {
+      continue;
+    }
+
+    mergeCustomer(key, {
+      draftGenerated: true,
+      reportApproved: report.status === "approved" || report.status === "sent_to_user",
+      pdfGenerated: Boolean(report.pdfUrl),
+      latestReportId: report.id,
+      latestReportStatus: report.status,
+      latestPdfUrl: report.pdfUrl,
+      lastActivityAt: report.updatedAt
+    });
+  }
+
+  const customerRows = Array.from(customers.values()).sort((left, right) => {
+    const leftTime = left.lastActivityAt ? new Date(left.lastActivityAt).getTime() : 0;
+    const rightTime = right.lastActivityAt ? new Date(right.lastActivityAt).getTime() : 0;
+    return rightTime - leftTime;
   });
 
   return {
     summary: {
-      signedIn: customers.filter((customer) => customer.signedIn).length,
-      quizSubmitted: customers.filter((customer) => customer.quizSubmitted).length,
-      scansUploaded: customers.filter((customer) => customer.scansUploaded).length,
-      draftGenerated: customers.filter((customer) => customer.draftGenerated).length,
-      reportApproved: customers.filter((customer) => customer.reportApproved).length,
-      pdfGenerated: customers.filter((customer) => customer.pdfGenerated).length,
-      ordered: customers.filter((customer) => customer.ordered).length
+      signedIn: uniqueCount(userRowsFiltered.map((row) => extractUserId(row) || readString(row.email))),
+      quizSubmitted: uniqueCount([
+        ...masterRows.map((row) => extractQuizResultId(row) || extractUserId(row) || readString(row.email)),
+        ...quizResultRows.map((row) => extractQuizResultId(row) || extractUserId(row) || readString(row.email)),
+        ...userRowsFiltered.filter(hasUserQuiz).map((row) => extractUserId(row) || readString(row.email))
+      ]),
+      scansUploaded: uniqueCount([
+        ...masterRows.filter(hasScans).map((row) => extractQuizResultId(row) || extractUserId(row) || readString(row.email)),
+        ...quizResultRows.filter(hasScans).map((row) => extractQuizResultId(row) || extractUserId(row) || readString(row.email))
+      ]),
+      draftGenerated: uniqueCount(localReports.map((report) => report.keys[0])),
+      reportApproved: uniqueCount(
+        localReports
+          .filter((report) => report.status === "approved" || report.status === "sent_to_user")
+          .map((report) => report.keys[0])
+      ),
+      pdfGenerated: uniqueCount([
+        ...localReports.filter((report) => Boolean(report.pdfUrl)).map((report) => report.keys[0]),
+        ...quizResultRows.filter(hasQuizResultReport).map((row) => extractQuizResultId(row) || extractUserId(row) || readString(row.email))
+      ]),
+      ordered: uniqueCount(orderRows.map((row) => extractUserId(row) || readString(row.email)))
     },
-    customers,
+    customers: customerRows,
     warnings
   };
 }
