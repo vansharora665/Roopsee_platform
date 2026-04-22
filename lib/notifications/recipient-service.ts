@@ -68,7 +68,7 @@ async function fetchAppUsersByIds(userIds: string[]) {
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
     .from("users")
-    .select("id, name, email, phone_no")
+    .select("id, name, email, phone_no, updated_at")
     .in("id", userIds);
 
   if (error) {
@@ -271,6 +271,48 @@ export async function listNotificationRecipients() {
     if (candidateTime > existingTime) {
       recipients.set(key, candidate);
     }
+  }
+
+  for (const appUser of pushTokenUsers) {
+    const normalizedEmail =
+      typeof appUser.email === "string" && appUser.email.trim()
+        ? appUser.email.trim().toLowerCase()
+        : null;
+    const key = `user:${appUser.id}`;
+
+    if (recipients.has(key)) {
+      continue;
+    }
+
+    const name =
+      (typeof appUser.name === "string" && appUser.name.trim()) ||
+      normalizedEmail?.split("@")[0] ||
+      "Unnamed customer";
+    const lastActivity =
+      typeof appUser.updated_at === "string" && appUser.updated_at.trim()
+        ? appUser.updated_at
+        : null;
+
+    recipients.set(key, {
+      key,
+      syncedProfileId: `user:${appUser.id}`,
+      targetUserId: appUser.id,
+      name,
+      firstName: name.split(/\s+/)[0] || name,
+      email: normalizedEmail,
+      phone:
+        typeof appUser.phone_no === "string" && appUser.phone_no.trim()
+          ? appUser.phone_no.trim()
+          : null,
+      suggestedProduct: null,
+      suggestedProducts: [],
+      tokenCount: pushTokenCounts.get(appUser.id) || 0,
+      hasPushToken: (pushTokenCounts.get(appUser.id) || 0) > 0,
+      sendable: true,
+      latestReportId: null,
+      latestReportStatus: null,
+      lastActivityAt: lastActivity
+    });
   }
 
   return Array.from(recipients.values()).sort((a, b) => {
