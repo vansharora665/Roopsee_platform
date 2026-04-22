@@ -43,6 +43,9 @@ export default async function ReportsPage({
           <Link href="/dashboard">
             <Button variant="secondary">Business funnel</Button>
           </Link>
+          <Link href="/notifications">
+            <Button variant="secondary">Notifications</Button>
+          </Link>
           <Link href="/follow-ups">
             <Button variant="secondary">Follow-ups</Button>
           </Link>
