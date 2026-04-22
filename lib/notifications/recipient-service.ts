@@ -212,7 +212,10 @@ export async function listNotificationRecipients() {
   )];
   const appUsersByEmail = await fetchAppUsersByEmail(emails);
   const pushTokenCounts = await fetchPushTokenCounts(
-    [...new Set(Array.from(appUsersByEmail.values()).map((user) => user.id))]
+    [...new Set([
+      ...Array.from(appUsersByEmail.values()).map((user) => user.id),
+      ...pushTokenUsers.map((user) => user.id)
+    ])]
   );
 
   const recipients = new Map<string, NotificationRecipient>();
