@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { syncSupabaseProfiles } from "@/lib/supabase/profile-service";
 import type { NotificationRecipient } from "@/lib/notifications/types";
 
 function readJsonArray(value: unknown) {
@@ -85,6 +86,8 @@ async function fetchPushTokenCounts(userIds: string[]) {
 }
 
 export async function listNotificationRecipients() {
+  await syncSupabaseProfiles(200).catch(() => []);
+
   const profiles = await prisma.syncedProfile.findMany({
     orderBy: [{ lastSyncedAt: "desc" }, { updatedAt: "desc" }],
     take: 200,
