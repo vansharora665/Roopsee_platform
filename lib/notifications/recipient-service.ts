@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
-import { syncSupabaseProfiles } from "@/lib/supabase/profile-service";
+import { syncSupabaseProfiles, syncSupabaseProfilesByEmails } from "@/lib/supabase/profile-service";
 import type { NotificationRecipient } from "@/lib/notifications/types";
 
 function readJsonArray(value: unknown) {
@@ -60,6 +60,45 @@ async function fetchAppUsersByEmail(emails: string[]) {
   );
 }
 
+async function fetchAppUsersByIds(userIds: string[]) {
+  if (userIds.length === 0) {
+    return [];
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("users")
+    .select("id, name, email, phone_no")
+    .in("id", userIds);
+
+  if (error) {
+    console.error("Failed to load app users by id for notifications:", error.message);
+    return [];
+  }
+
+  return data || [];
+}
+
+async function fetchPushTokenUserIds() {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("user_push_tokens")
+    .select("user_id");
+
+  if (error) {
+    console.error("Failed to load push token user ids:", error.message);
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      (data || [])
+        .map((row) => (typeof row.user_id === "string" ? row.user_id : null))
+        .filter((value): value is string => Boolean(value))
+    )
+  );
+}
+
 async function fetchPushTokenCounts(userIds: string[]) {
   if (userIds.length === 0) {
     return new Map<string, number>();
@@ -88,7 +127,7 @@ async function fetchPushTokenCounts(userIds: string[]) {
 export async function listNotificationRecipients() {
   await syncSupabaseProfiles(200).catch(() => []);
 
-  const profiles = await prisma.syncedProfile.findMany({
+  const baseProfiles = await prisma.syncedProfile.findMany({
     orderBy: [{ lastSyncedAt: "desc" }, { updatedAt: "desc" }],
     take: 200,
     include: {
@@ -117,6 +156,54 @@ export async function listNotificationRecipients() {
       }
     }
   });
+
+  const pushTokenUserIds = await fetchPushTokenUserIds();
+  const pushTokenUsers = await fetchAppUsersByIds(pushTokenUserIds);
+  const missingPushEmails = pushTokenUsers
+    .map((user) => user.email?.trim().toLowerCase() || null)
+    .filter((value): value is string => Boolean(value))
+    .filter((email) => !baseProfiles.some((profile) => profile.email?.trim().toLowerCase() === email));
+
+  if (missingPushEmails.length > 0) {
+    await syncSupabaseProfilesByEmails(missingPushEmails).catch(() => []);
+  }
+
+  const supplementalProfiles = missingPushEmails.length
+    ? await prisma.syncedProfile.findMany({
+        where: {
+          email: {
+            in: missingPushEmails
+          }
+        },
+        include: {
+          reports: {
+            orderBy: [{ createdAt: "desc" }],
+            take: 3,
+            include: {
+              doctorReview: {
+                select: {
+                  productRows: true
+                }
+              },
+              productMatches: {
+                orderBy: [{ rank: "asc" }],
+                take: 4,
+                include: {
+                  product: {
+                    select: {
+                      brandName: true,
+                      productName: true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      })
+    : [];
+
+  const profiles = [...baseProfiles, ...supplementalProfiles];
 
   const emails = [...new Set(
     profiles

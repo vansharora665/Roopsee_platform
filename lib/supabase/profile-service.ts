@@ -250,6 +250,23 @@ export async function syncSupabaseProfileByEmail(email: string) {
   return profile ?? null;
 }
 
+export async function syncSupabaseProfilesByEmails(emails: string[]) {
+  const normalizedEmails = Array.from(
+    new Set(
+      emails
+        .map((email) => readString(email)?.toLowerCase())
+        .filter((value): value is string => Boolean(value))
+    )
+  );
+
+  if (normalizedEmails.length === 0) {
+    return [];
+  }
+
+  const rows = await fetchSupabaseProfileRowsByEmails(normalizedEmails);
+  return syncProfileRows(rows);
+}
+
 export async function syncSupabaseProfiles(limit = 50) {
   const supabase = getSupabaseAdminClient();
   const table = getProfilesTableName();
