@@ -31,9 +31,17 @@ export default async function FollowUpsPage() {
             add new products if needed, and generate a new editable report draft.
           </p>
         </div>
-        <Link href="/reports">
-          <Button variant="secondary">Back to reports</Button>
-        </Link>
+        <div className="flex flex-wrap gap-3">
+          <Link href="/dashboard">
+            <Button variant="secondary">Funnel</Button>
+          </Link>
+          <Link href="/notifications">
+            <Button variant="secondary">Notifications</Button>
+          </Link>
+          <Link href="/reports">
+            <Button variant="secondary">Back to reports</Button>
+          </Link>
+        </div>
       </Card>
 
       <div className="grid gap-5">
