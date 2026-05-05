@@ -47,7 +47,7 @@ export default async function BusinessDashboardPage() {
         </div>
         <div className="flex flex-wrap gap-3">
           <Link href="/notifications">
-            <Button variant="secondary">Notifications</Button>
+            <Button variant="secondary">Android notification</Button>
           </Link>
           <Link href="/follow-ups">
             <Button variant="secondary">Follow-ups</Button>

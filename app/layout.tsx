@@ -38,7 +38,7 @@ export default async function RootLayout({
                     Funnel
                   </Link>
                   <Link className="rounded-full bg-slate-100 px-3 py-1.5 text-slate-700 hover:bg-slate-200" href="/notifications">
-                    Notifications
+                    Android notification
                   </Link>
                   <Link className="rounded-full bg-slate-100 px-3 py-1.5 text-slate-700 hover:bg-slate-200" href="/reports">
                     Reports

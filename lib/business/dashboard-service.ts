@@ -171,10 +171,73 @@ type LocalReportSnapshot = {
   updatedAt: string;
   pdfUrl: string | null;
   keys: string[];
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  userId: string | null;
+  quizResultId: string | null;
 };
 
 function uniqueCount(values: Array<string | null | undefined>) {
   return new Set(values.filter((value): value is string => Boolean(value))).size;
+}
+
+function isPlaceholderName(value: string | null | undefined) {
+  return !value || value.trim().toLowerCase() === "unnamed customer";
+}
+
+function titleCaseWords(value: string) {
+  return value
+    .split(/\s+/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function deriveNameFromEmail(email: string | null | undefined) {
+  const normalized = readString(email);
+  if (!normalized) {
+    return null;
+  }
+
+  const localPart = normalized.split("@")[0]?.replace(/[._-]+/g, " ").trim();
+  return localPart ? titleCaseWords(localPart) : null;
+}
+
+function deriveNameFromPhone(phone: string | null | undefined) {
+  const normalized = readString(phone);
+  if (!normalized) {
+    return null;
+  }
+
+  const digits = normalized.replace(/\D+/g, "");
+  if (digits.length < 4) {
+    return null;
+  }
+
+  return `Customer ${digits.slice(-4)}`;
+}
+
+function resolveCustomerName(args: {
+  nextName?: string | null;
+  existingName?: string | null;
+  nextEmail?: string | null;
+  existingEmail?: string | null;
+  nextPhone?: string | null;
+  existingPhone?: string | null;
+}) {
+  const directName = [args.nextName, args.existingName].find((value) => !isPlaceholderName(value));
+  if (directName) {
+    return directName;
+  }
+
+  return (
+    deriveNameFromEmail(args.nextEmail)
+    || deriveNameFromEmail(args.existingEmail)
+    || deriveNameFromPhone(args.nextPhone)
+    || deriveNameFromPhone(args.existingPhone)
+    || "Unnamed customer"
+  );
 }
 
 export async function getBusinessDashboardData(): Promise<BusinessDashboardData> {
@@ -238,7 +301,12 @@ export async function getBusinessDashboardData(): Promise<BusinessDashboardData>
       createdAt: report.createdAt.toISOString(),
       updatedAt: report.updatedAt.toISOString(),
       pdfUrl: report.generatedFile?.pdfUrl ?? null,
-      keys
+      keys,
+      name: report.patientInfo?.name ?? report.syncedProfile?.fullName ?? readString(profileJson.name),
+      email: report.syncedProfile?.email ?? readString(profileJson.email),
+      phone: report.syncedProfile?.phone ?? readString(profileJson.phone_no) ?? readString(profileJson.phone),
+      userId: readString(profileJson.user_id) ?? readString(profileJson.quiz_user_id),
+      quizResultId: readString(profileJson.quiz_result_id)
     };
   });
 
@@ -273,7 +341,14 @@ export async function getBusinessDashboardData(): Promise<BusinessDashboardData>
     const existing = customers.get(seedKey);
     const next: FunnelCustomerRow = {
       key: seedKey,
-      name: partial.name ?? existing?.name ?? "Unnamed customer",
+      name: resolveCustomerName({
+        nextName: partial.name,
+        existingName: existing?.name,
+        nextEmail: partial.email,
+        existingEmail: existing?.email,
+        nextPhone: partial.phone,
+        existingPhone: existing?.phone
+      }),
       email: partial.email ?? existing?.email ?? null,
       phone: partial.phone ?? existing?.phone ?? null,
       userId: partial.userId ?? existing?.userId ?? null,
@@ -292,6 +367,10 @@ export async function getBusinessDashboardData(): Promise<BusinessDashboardData>
     };
 
     customers.set(seedKey, next);
+  }
+
+  function findExistingCustomerKey(keys: string[]) {
+    return keys.find((key) => customers.has(key)) ?? null;
   }
 
   function relatedKeyList(row: SupabaseRow) {
@@ -363,12 +442,17 @@ export async function getBusinessDashboardData(): Promise<BusinessDashboardData>
   }
 
   for (const report of localReports) {
-    const key = report.keys[0];
+    const key = findExistingCustomerKey(report.keys) ?? report.keys[0];
     if (!key) {
       continue;
     }
 
     mergeCustomer(key, {
+      name: report.name ?? undefined,
+      email: report.email ?? undefined,
+      phone: report.phone ?? undefined,
+      userId: report.userId ?? undefined,
+      quizResultId: report.quizResultId ?? undefined,
       draftGenerated: true,
       reportApproved: report.status === "approved" || report.status === "sent_to_user",
       pdfGenerated: Boolean(report.pdfUrl),
@@ -379,11 +463,21 @@ export async function getBusinessDashboardData(): Promise<BusinessDashboardData>
     });
   }
 
-  const customerRows = Array.from(customers.values()).sort((left, right) => {
-    const leftTime = left.lastActivityAt ? new Date(left.lastActivityAt).getTime() : 0;
-    const rightTime = right.lastActivityAt ? new Date(right.lastActivityAt).getTime() : 0;
-    return rightTime - leftTime;
-  });
+  const customerRows = Array.from(customers.values())
+    .filter((customer) => {
+      return Boolean(
+        (!isPlaceholderName(customer.name) && readString(customer.name))
+        || customer.email
+        || customer.phone
+        || customer.userId
+        || customer.quizResultId
+      );
+    })
+    .sort((left, right) => {
+      const leftTime = left.lastActivityAt ? new Date(left.lastActivityAt).getTime() : 0;
+      const rightTime = right.lastActivityAt ? new Date(right.lastActivityAt).getTime() : 0;
+      return rightTime - leftTime;
+    });
 
   return {
     summary: {

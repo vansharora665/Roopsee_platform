@@ -36,7 +36,7 @@ export default async function FollowUpsPage() {
             <Button variant="secondary">Funnel</Button>
           </Link>
           <Link href="/notifications">
-            <Button variant="secondary">Notifications</Button>
+            <Button variant="secondary">Android notification</Button>
           </Link>
           <Link href="/reports">
             <Button variant="secondary">Back to reports</Button>

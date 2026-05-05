@@ -204,10 +204,10 @@ export function NotificationCenter({
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-2">
             <p className="text-sm font-semibold uppercase tracking-[0.25em] text-brand-blue">
-              Notification center
+              Android notification
             </p>
             <h1 className="text-4xl font-semibold tracking-tight text-slate-900">
-              Send app messages instantly or queue them for later
+              Send Android app messages instantly or queue them for later
             </h1>
             <p className="max-w-3xl text-sm text-slate-600">
               Pick one or many customers, write one message, and personalize it with labels like
