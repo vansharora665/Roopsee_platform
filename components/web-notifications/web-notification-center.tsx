@@ -8,11 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { personalizeNotificationTemplate, NOTIFICATION_LABELS } from "@/lib/notifications/template";
-import type { NotificationRecipient, PushCampaignRecord } from "@/lib/notifications/types";
+import {
+  personalizeWebNotificationTemplate,
+  WEB_NOTIFICATION_LABELS
+} from "@/lib/web-notifications/template";
+import type { WebNotificationRecipient, WebPushCampaignRecord } from "@/lib/web-notifications/types";
 import { formatDate } from "@/lib/utils";
 
-function campaignStatusClasses(status: PushCampaignRecord["status"]) {
+function campaignStatusClasses(status: WebPushCampaignRecord["status"]) {
   switch (status) {
     case "scheduled":
       return "bg-amber-100 text-amber-900";
@@ -29,19 +32,19 @@ function campaignStatusClasses(status: PushCampaignRecord["status"]) {
   }
 }
 
-function audienceCount(campaign: PushCampaignRecord) {
+function audienceCount(campaign: WebPushCampaignRecord) {
   return campaign.audience.user_ids.length + campaign.audience.emails.length;
 }
 
-type NotificationCenterProps = {
-  recipients: NotificationRecipient[];
-  campaigns: PushCampaignRecord[];
+type WebNotificationCenterProps = {
+  recipients: WebNotificationRecipient[];
+  campaigns: WebPushCampaignRecord[];
 };
 
-export function NotificationCenter({
+export function WebNotificationCenter({
   recipients,
   campaigns
-}: NotificationCenterProps) {
+}: WebNotificationCenterProps) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [title, setTitle] = useState("Roopsee");
@@ -61,7 +64,7 @@ export function NotificationCenter({
     const query = search.trim().toLowerCase();
 
     return recipients.filter((recipient) => {
-      if (showOnlyReady && (!recipient.sendable || !recipient.hasPushToken)) {
+      if (showOnlyReady && (!recipient.sendable || !recipient.hasWebSubscription)) {
         return false;
       }
 
@@ -146,7 +149,7 @@ export function NotificationCenter({
     startSubmitTransition(async () => {
       setFeedback(null);
 
-      const response = await fetch("/api/notifications/campaigns", {
+      const response = await fetch("/api/web-notifications/campaigns", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -163,14 +166,14 @@ export function NotificationCenter({
       const payload = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        setFeedback(payload?.error || "Could not queue the notification.");
+        setFeedback(payload?.error || "Could not queue the browser notification.");
         return;
       }
 
       setFeedback(
         sendAt
-          ? "Scheduled. The campaign is now queued on the shared push system."
-          : "Queued now. Delivery should begin within about 30 seconds."
+          ? "Scheduled. The browser-notification campaign is now queued on the shared worker."
+          : "Queued now. Browser delivery should begin within about 30 seconds."
       );
       if (!sendAt) {
         setScheduleAt("");
@@ -183,7 +186,7 @@ export function NotificationCenter({
     startCancelTransition(async () => {
       setFeedback(null);
 
-      const response = await fetch(`/api/notifications/campaigns/${id}`, {
+      const response = await fetch(`/api/web-notifications/campaigns/${id}`, {
         method: "DELETE"
       });
       const payload = await response.json().catch(() => ({}));
@@ -204,23 +207,23 @@ export function NotificationCenter({
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-2">
             <p className="text-sm font-semibold uppercase tracking-[0.25em] text-brand-blue">
-              Android notification
+              Web notification center
             </p>
             <h1 className="text-4xl font-semibold tracking-tight text-slate-900">
-              Send Android app messages instantly or queue them for later
+              Send browser notifications instantly or queue them for later
             </h1>
             <p className="max-w-3xl text-sm text-slate-600">
               Pick one or many customers, write one message, and personalize it with labels like
-              name or suggested product. Send now queues immediately on the live push system, and
-              scheduled sends stay editable here.
+              name or suggested product. Send now queues immediately on the live web worker, and
+              scheduled browser sends stay editable here.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Link href="/dashboard">
               <Button variant="secondary">Back to funnel</Button>
             </Link>
-            <Link href="/web-notifications">
-              <Button variant="secondary">Web notifications</Button>
+            <Link href="/notifications">
+              <Button variant="secondary">App notifications</Button>
             </Link>
             <Link href="/reports">
               <Button variant="secondary">Reports</Button>
@@ -231,10 +234,10 @@ export function NotificationCenter({
         <div className="grid gap-4 md:grid-cols-3">
           <div className="rounded-2xl bg-slate-50 p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-              Ready with tokens
+              Ready with browsers
             </p>
             <p className="mt-2 text-3xl font-semibold text-slate-900">
-              {recipients.filter((recipient) => recipient.hasPushToken).length}
+              {recipients.filter((recipient) => recipient.hasWebSubscription).length}
             </p>
           </div>
           <div className="rounded-2xl bg-slate-50 p-4">
@@ -259,8 +262,8 @@ export function NotificationCenter({
           <div className="space-y-2">
             <h2 className="text-xl font-semibold text-slate-900">Audience</h2>
             <p className="text-sm text-slate-500">
-              Search customers, pick one or many, and keep the focus on users whose app already has
-              a push token.
+              Search customers, pick one or many, and keep the focus on users whose browser has
+              already granted and registered web notifications.
             </p>
           </div>
 
@@ -277,7 +280,7 @@ export function NotificationCenter({
                 onChange={(event) => setShowOnlyReady(event.target.checked)}
                 type="checkbox"
               />
-              Show only users ready for push
+              Show only users ready for browser notifications
             </label>
             <div className="flex flex-wrap gap-2">
               <Button onClick={setAllVisibleSelected} variant="secondary">
@@ -296,7 +299,7 @@ export function NotificationCenter({
                   <th className="px-4 py-3 font-semibold">Pick</th>
                   <th className="px-4 py-3 font-semibold">Customer</th>
                   <th className="px-4 py-3 font-semibold">Suggested product</th>
-                  <th className="px-4 py-3 font-semibold">Push</th>
+                  <th className="px-4 py-3 font-semibold">Browser</th>
                   <th className="px-4 py-3 font-semibold">Last activity</th>
                 </tr>
               </thead>
@@ -332,14 +335,14 @@ export function NotificationCenter({
                       <td className="px-4 py-3 align-top">
                         <span
                           className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                            recipient.hasPushToken
+                            recipient.hasWebSubscription
                               ? "bg-emerald-100 text-emerald-900"
                               : "bg-amber-100 text-amber-900"
                           }`}
                         >
-                          {recipient.hasPushToken
-                            ? `${recipient.tokenCount} token${recipient.tokenCount === 1 ? "" : "s"}`
-                            : "No token yet"}
+                          {recipient.hasWebSubscription
+                            ? `${recipient.subscriptionCount} subscription${recipient.subscriptionCount === 1 ? "" : "s"}`
+                            : "No browser subscription yet"}
                         </span>
                       </td>
                       <td className="px-4 py-3 align-top text-slate-600">
@@ -363,7 +366,7 @@ export function NotificationCenter({
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {NOTIFICATION_LABELS.map((label) => (
+              {WEB_NOTIFICATION_LABELS.map((label) => (
                 <button
                   key={label}
                   className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200"
@@ -396,7 +399,7 @@ export function NotificationCenter({
                 />
               </div>
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">Open app URL</label>
+                <label className="mb-2 block text-sm font-medium text-slate-700">Open URL</label>
                 <Input onChange={(event) => setUrl(event.target.value)} value={url} />
               </div>
               <div>
@@ -426,7 +429,7 @@ export function NotificationCenter({
             </div>
 
             <p className="text-xs text-slate-500">
-              Send now still uses the live shared push worker, so delivery usually starts within
+              Send now still uses the live shared web worker, so delivery usually starts within
               about 30 seconds.
             </p>
 
@@ -452,10 +455,10 @@ export function NotificationCenter({
                     <p className="text-sm font-semibold text-slate-900">{recipient.name}</p>
                     <p className="mt-1 text-xs text-slate-500">{recipient.email || "No email"}</p>
                     <p className="mt-3 text-sm font-medium text-slate-900">
-                      {personalizeNotificationTemplate(title, recipient) || "Roopsee"}
+                      {personalizeWebNotificationTemplate(title, recipient) || "Roopsee"}
                     </p>
                     <p className="mt-1 text-sm text-slate-700">
-                      {personalizeNotificationTemplate(body, recipient) || "Message body will appear here."}
+                      {personalizeWebNotificationTemplate(body, recipient) || "Message body will appear here."}
                     </p>
                   </div>
                 ))}
@@ -469,8 +472,8 @@ export function NotificationCenter({
         <div className="space-y-1">
           <h2 className="text-xl font-semibold text-slate-900">Queued and sent campaigns</h2>
           <p className="text-sm text-slate-500">
-            These campaigns are shared with the live push system, so what you see here is what the
-            app delivery worker sees too.
+            These campaigns are shared with the live web-notification worker, so what you see here
+            is what the browser delivery worker sees too.
           </p>
         </div>
 

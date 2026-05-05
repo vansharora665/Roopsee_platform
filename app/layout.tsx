@@ -40,6 +40,9 @@ export default async function RootLayout({
                   <Link className="rounded-full bg-slate-100 px-3 py-1.5 text-slate-700 hover:bg-slate-200" href="/notifications">
                     Android notification
                   </Link>
+                  <Link className="rounded-full bg-slate-100 px-3 py-1.5 text-slate-700 hover:bg-slate-200" href="/web-notifications">
+                    Web Notifications
+                  </Link>
                   <Link className="rounded-full bg-slate-100 px-3 py-1.5 text-slate-700 hover:bg-slate-200" href="/reports">
                     Reports
                   </Link>

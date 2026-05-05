@@ -46,6 +46,9 @@ export default async function ReportsPage({
           <Link href="/notifications">
             <Button variant="secondary">Android notification</Button>
           </Link>
+          <Link href="/web-notifications">
+            <Button variant="secondary">Web notifications</Button>
+          </Link>
           <Link href="/follow-ups">
             <Button variant="secondary">Follow-ups</Button>
           </Link>

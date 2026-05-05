@@ -38,6 +38,9 @@ export default async function FollowUpsPage() {
           <Link href="/notifications">
             <Button variant="secondary">Android notification</Button>
           </Link>
+          <Link href="/web-notifications">
+            <Button variant="secondary">Web notifications</Button>
+          </Link>
           <Link href="/reports">
             <Button variant="secondary">Back to reports</Button>
           </Link>
