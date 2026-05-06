@@ -176,7 +176,7 @@ export function WebNotificationCenter({
         sendAt
           ? "Scheduled. The browser-notification campaign is now queued on the shared worker."
           : results?.sent_count > 0
-            ? `Sent now to ${results.sent_count} browser${results.sent_count === 1 ? "" : "s"}.`
+            ? `Sent now to ${results.sent_count} browser${results.sent_count === 1 ? "" : "s"}${results.recipients?.[0]?.targets?.[0]?.user_agent ? `: ${results.recipients[0].targets[0].user_agent}` : ""}.`
             : results?.skipped_count > 0
               ? "No active browser subscription was found for the selected users."
               : results?.recipients?.some?.((recipient: { reason?: string }) => recipient.reason === "invalid_or_stale_subscription")

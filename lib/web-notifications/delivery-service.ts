@@ -18,6 +18,10 @@ type StoredWebPushSubscription = {
   user_id?: string | null;
   endpoint?: string | null;
   expiration_time?: number | null;
+  user_agent?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  last_seen_at?: string | null;
   keys?: {
     auth?: string | null;
     p256dh?: string | null;
@@ -36,6 +40,11 @@ type WebPushRecipientResult = {
   invalid_subscription_count: number;
   status: "sent" | "failed" | "skipped";
   reason: string | null;
+  targets?: Array<{
+    endpoint_host: string;
+    user_agent: string;
+    last_seen_at: string | null;
+  }>;
   errors?: Array<{
     status_code: number | null;
     message: string;
@@ -131,6 +140,11 @@ async function sendToSubscriptions({
   );
   const invalidEndpoints: string[] = [];
   const errors: Array<{ status_code: number | null; message: string }> = [];
+  const targets: Array<{
+    endpoint_host: string;
+    user_agent: string;
+    last_seen_at: string | null;
+  }> = [];
   let successCount = 0;
   let failureCount = 0;
 
@@ -143,6 +157,7 @@ async function sendToSubscriptions({
 
   for (const subscription of validSubscriptions) {
     try {
+      const endpointUrl = new URL(String(subscription.endpoint));
       await webpush.sendNotification(
         {
           endpoint: String(subscription.endpoint),
@@ -155,6 +170,15 @@ async function sendToSubscriptions({
         payload
       );
       successCount += 1;
+      targets.push({
+        endpoint_host: endpointUrl.host,
+        user_agent: String(subscription.user_agent || "Unknown browser"),
+        last_seen_at:
+          subscription.last_seen_at ||
+          subscription.updated_at ||
+          subscription.created_at ||
+          null
+      });
     } catch (error) {
       failureCount += 1;
       const statusCode = Number((error as { statusCode?: number }).statusCode || 0);
@@ -181,6 +205,7 @@ async function sendToSubscriptions({
     successCount,
     failureCount,
     invalidEndpoints,
+    targets,
     errors
   };
 }
@@ -216,6 +241,7 @@ export async function sendWebCampaignToRecipients({
         invalid_subscription_count: 0,
         status: "skipped",
         reason: "no_web_subscription",
+        targets: [],
         errors: []
       });
       continue;
@@ -246,6 +272,7 @@ export async function sendWebCampaignToRecipients({
           : response.invalidEndpoints.length > 0
             ? "invalid_or_stale_subscription"
             : "delivery_failed",
+      targets: response.targets,
       errors: response.errors
     });
   }
