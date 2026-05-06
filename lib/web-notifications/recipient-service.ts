@@ -5,6 +5,13 @@ import type { WebNotificationRecipient } from "@/lib/web-notifications/types";
 const PUSH_BUCKET = "roopsee-system-data";
 const WEB_PUSH_SUBSCRIPTIONS_PATH = "notifications/web-push-subscriptions.json";
 
+type AppUser = {
+  id: string;
+  name: string | null;
+  email: string | null;
+  phone_no: string | null;
+};
+
 function isMissingObjectError(
   error: { statusCode?: number | string; message?: string } | null | undefined
 ) {
@@ -45,10 +52,7 @@ function pickProductNames(report: {
 
 async function fetchAppUsersByEmail(emails: string[]) {
   if (emails.length === 0) {
-    return new Map<
-      string,
-      { id: string; name: string | null; email: string | null; phone_no: string | null }
-    >();
+    return new Map<string, AppUser>();
   }
 
   const supabase = getSupabaseAdminClient();
@@ -69,10 +73,31 @@ async function fetchAppUsersByEmail(emails: string[]) {
   );
 }
 
-async function fetchWebSubscriptionCounts(userIds: string[]) {
-  if (userIds.length === 0) {
-    return new Map<string, number>();
+async function fetchAppUsersByIds(userIds: string[]) {
+  const cleanIds = [...new Set(userIds.filter(Boolean))];
+  if (cleanIds.length === 0) {
+    return new Map<string, AppUser>();
   }
+
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("users")
+    .select("id, name, email, phone_no")
+    .in("id", cleanIds);
+
+  if (error) {
+    console.error("Failed to load app users by id for web notifications:", error.message);
+    return new Map();
+  }
+
+  return new Map((data || []).filter((item) => item.id).map((item) => [item.id, item]));
+}
+
+async function fetchAllWebSubscriptionCounts() {
+  const result = {
+    counts: new Map<string, number>(),
+    lastSeenAt: new Map<string, string | null>()
+  };
 
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase.storage
@@ -80,26 +105,39 @@ async function fetchWebSubscriptionCounts(userIds: string[]) {
     .download(WEB_PUSH_SUBSCRIPTIONS_PATH);
 
   if (error) {
-    if (isMissingObjectError(error)) return new Map();
+    if (isMissingObjectError(error)) return result;
     console.error("Failed to load web subscription counts:", error.message);
-    return new Map();
+    return result;
   }
 
   const text = await data.text();
-  if (!text.trim()) return new Map();
+  if (!text.trim()) return result;
 
   const parsed = JSON.parse(text);
   const rows = Array.isArray(parsed) ? parsed : [];
-  const userIdSet = new Set(userIds);
-  const counts = new Map<string, number>();
 
   for (const row of rows) {
     const userId = typeof row?.user_id === "string" ? row.user_id : null;
-    if (!userId || !userIdSet.has(userId)) continue;
-    counts.set(userId, (counts.get(userId) || 0) + 1);
+    if (!userId) continue;
+
+    result.counts.set(userId, (result.counts.get(userId) || 0) + 1);
+
+    const seenAt =
+      typeof row?.last_seen_at === "string"
+        ? row.last_seen_at
+        : typeof row?.updated_at === "string"
+          ? row.updated_at
+          : typeof row?.created_at === "string"
+            ? row.created_at
+            : null;
+    const existingSeenAt = result.lastSeenAt.get(userId);
+
+    if (!existingSeenAt || (seenAt && new Date(seenAt).getTime() > new Date(existingSeenAt).getTime())) {
+      result.lastSeenAt.set(userId, seenAt);
+    }
   }
 
-  return counts;
+  return result;
 }
 
 export async function listWebNotificationRecipients() {
@@ -139,9 +177,9 @@ export async function listWebNotificationRecipients() {
       .filter((value): value is string => Boolean(value))
   )];
   const appUsersByEmail = await fetchAppUsersByEmail(emails);
-  const webSubscriptionCounts = await fetchWebSubscriptionCounts(
-    [...new Set(Array.from(appUsersByEmail.values()).map((user) => user.id))]
-  );
+  const webSubscriptionData = await fetchAllWebSubscriptionCounts();
+  const appUsersById = await fetchAppUsersByIds(Array.from(webSubscriptionData.counts.keys()));
+  const webSubscriptionCounts = webSubscriptionData.counts;
 
   const recipients = new Map<string, WebNotificationRecipient>();
 
@@ -199,6 +237,38 @@ export async function listWebNotificationRecipients() {
     if (candidateTime > existingTime) {
       recipients.set(key, candidate);
     }
+  }
+
+  for (const [userId, subscriptionCount] of webSubscriptionCounts) {
+    const key = `user:${userId}`;
+    if (recipients.has(key)) continue;
+
+    const appUser = appUsersById.get(userId);
+    if (!appUser) continue;
+
+    const normalizedEmail = appUser.email?.trim().toLowerCase() || null;
+    const name =
+      appUser.name?.trim() ||
+      normalizedEmail?.split("@")[0] ||
+      "Unnamed customer";
+
+    recipients.set(key, {
+      key,
+      syncedProfileId: `web:${userId}`,
+      targetUserId: userId,
+      name,
+      firstName: name.split(/\s+/)[0] || name,
+      email: normalizedEmail,
+      phone: appUser.phone_no?.trim() || null,
+      suggestedProduct: null,
+      suggestedProducts: [],
+      subscriptionCount,
+      hasWebSubscription: subscriptionCount > 0,
+      sendable: true,
+      latestReportId: null,
+      latestReportStatus: null,
+      lastActivityAt: webSubscriptionData.lastSeenAt.get(userId) || null
+    });
   }
 
   return Array.from(recipients.values()).sort((a, b) => {
