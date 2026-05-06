@@ -3,9 +3,15 @@ import { z } from "zod";
 import { apiResponse, handleApiError } from "@/lib/api";
 import {
   buildWebPushCampaignRecord,
+  updateWebPushCampaign,
   upsertWebPushCampaign
 } from "@/lib/web-notifications/campaign-store";
+import { sendWebCampaignToRecipients } from "@/lib/web-notifications/delivery-service";
 import { getWebNotificationRecipientsByKeys } from "@/lib/web-notifications/recipient-service";
+import {
+  processDueWebPushCampaigns,
+  startWebPushScheduler
+} from "@/lib/web-notifications/scheduler";
 import { getCurrentUser } from "@/lib/auth";
 
 const createCampaignSchema = z.object({
@@ -22,6 +28,9 @@ const createCampaignSchema = z.object({
 
 export async function POST(request: Request) {
   try {
+    startWebPushScheduler();
+    await processDueWebPushCampaigns();
+
     const payload = createCampaignSchema.parse(await request.json());
     const recipients = await getWebNotificationRecipientsByKeys(payload.recipientKeys);
 
@@ -47,6 +56,32 @@ export async function POST(request: Request) {
     });
 
     await upsertWebPushCampaign(campaign);
+
+    if (sendAt.getTime() <= Date.now()) {
+      await updateWebPushCampaign(campaign.id, {
+        status: "processing",
+        processing_started_at: new Date().toISOString()
+      });
+
+      const results = await sendWebCampaignToRecipients({
+        recipients: sendableRecipients,
+        titleTemplate: payload.title,
+        bodyTemplate: payload.body,
+        url: payload.url
+      });
+
+      const deliveredCampaign = await updateWebPushCampaign(campaign.id, {
+        status: results.sent_count > 0 ? "sent" : "failed",
+        sent_at: new Date().toISOString(),
+        results
+      });
+
+      return apiResponse({
+        campaign: deliveredCampaign || campaign,
+        queuedRecipientCount: sendableRecipients.length,
+        results
+      }, 201);
+    }
 
     return apiResponse({
       campaign,

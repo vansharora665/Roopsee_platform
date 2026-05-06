@@ -173,7 +173,11 @@ export function WebNotificationCenter({
       setFeedback(
         sendAt
           ? "Scheduled. The browser-notification campaign is now queued on the shared worker."
-          : "Queued now. Browser delivery should begin within about 30 seconds."
+          : payload?.results?.sent_count > 0
+            ? `Sent now to ${payload.results.sent_count} browser${payload.results.sent_count === 1 ? "" : "s"}.`
+            : payload?.results?.skipped_count > 0
+              ? "No active browser subscription was found for the selected users."
+              : "The browser notification could not be delivered."
       );
       if (!sendAt) {
         setScheduleAt("");
