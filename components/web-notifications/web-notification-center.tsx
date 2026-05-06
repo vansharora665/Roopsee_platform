@@ -164,6 +164,8 @@ export function WebNotificationCenter({
       });
 
       const payload = await response.json().catch(() => ({}));
+      const responseData = payload?.data || payload || {};
+      const results = responseData?.results;
 
       if (!response.ok) {
         setFeedback(payload?.error || "Could not queue the browser notification.");
@@ -173,14 +175,14 @@ export function WebNotificationCenter({
       setFeedback(
         sendAt
           ? "Scheduled. The browser-notification campaign is now queued on the shared worker."
-          : payload?.results?.sent_count > 0
-            ? `Sent now to ${payload.results.sent_count} browser${payload.results.sent_count === 1 ? "" : "s"}.`
-            : payload?.results?.skipped_count > 0
+          : results?.sent_count > 0
+            ? `Sent now to ${results.sent_count} browser${results.sent_count === 1 ? "" : "s"}.`
+            : results?.skipped_count > 0
               ? "No active browser subscription was found for the selected users."
-              : payload?.results?.recipients?.some?.((recipient: { reason?: string }) => recipient.reason === "invalid_or_stale_subscription")
+              : results?.recipients?.some?.((recipient: { reason?: string }) => recipient.reason === "invalid_or_stale_subscription")
                 ? "The saved browser subscription was stale and has been cleared. Ask the user to reopen the website and allow notifications again."
-                : payload?.results?.recipients?.[0]?.errors?.[0]?.message
-                  ? `The browser notification failed: ${payload.results.recipients[0].errors[0].message}`
+                : results?.recipients?.[0]?.errors?.[0]?.message
+                  ? `The browser notification failed: ${results.recipients[0].errors[0].message}`
                   : "The browser notification could not be delivered."
       );
       if (!sendAt) {
