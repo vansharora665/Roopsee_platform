@@ -30,6 +30,10 @@ function displayProductRowTitle(row: DoctorProductRowDto) {
       return "Sunscreen";
     case "moisturizer":
       return "Moisturizer";
+    case "am_serum":
+      return "AM Serum";
+    case "pm_repair":
+      return "PM Serum / Cream / Repair";
     case "repair_serum":
       return "Repair / Serum";
     default:

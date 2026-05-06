@@ -200,8 +200,6 @@ export function buildManualPrompt(input: PromptInput) {
       : String(input.assets.scanContextJson ?? "None provided");
 
   const imageReferences = [input.assets.image1Url, input.assets.image2Url, input.assets.image3Url].filter(Boolean);
-  const hasCatalogAttachment = Boolean(input.productCatalogText && input.productCatalogText.trim().length > 0);
-
   return [
     "You are preparing a dermatologist-style Roopsee draft report.",
     "Return valid JSON only.",
@@ -221,9 +219,8 @@ export function buildManualPrompt(input: PromptInput) {
     "Keep primary concerns to the 1 or 2 strongest issues only. Use secondary concerns for weaker or supporting issues.",
     "If the evidence for a concern is weak, do not promote it to primary.",
     "Choose cleanser versus facewash based on skin type, oiliness, hydration, and breakout tendency. Do not recommend serums, moisturizers, sunscreens, lip products, or body products in the cleanser slot.",
-    hasCatalogAttachment
-      ? 'A product catalog is attached below. Choose exact products only from that catalog and populate recommended_products with simple strings in this exact format: "Brand - Product Name". Use null only if no suitable product exists for a slot. Do not return nested objects inside recommended_products in catalog-attached mode.'
-      : "No product catalog is attached. Leave recommended_products as null and let the platform do ingredient-based catalog matching later.",
+    "Do not recommend exact products or brands in this JSON.",
+    "Leave recommended_products as null. Product selection is handled separately by the Dr Monika protocol sheet after the analysis is imported.",
     "",
     "Scoring method:",
     "- Internally score these 5 parameters from 0 to 10: Acne / Breakouts, Pigmentation / Dark Spots, Texture and Pores, Oiliness / Hydration, Sensitivity / Redness.",
@@ -278,16 +275,13 @@ export function buildManualPrompt(input: PromptInput) {
     `Visible issues: ${input.assets.visibleIssues.join(", ") || "None provided"}`,
     `Negative findings: ${input.assets.negativeFindings.join(", ") || "None provided"}`,
     `Profile hints: ${input.assets.profileHints.join(", ") || "None provided"}`,
-        "Questionnaire-derived case signals (use as strong but overridable guidance):",
+    "Questionnaire-derived case signals (use as strong but overridable guidance):",
     insightLines.join("\n"),
 
     `Scan context JSON: ${scanContext}`,
     `Image references in final order (front, left, right): ${imageReferences.join(", ") || "None provided"}`,
     "",
-    hasCatalogAttachment ? "Attached product catalog:" : "Product catalog attachment: none",
-    hasCatalogAttachment ? input.productCatalogText ?? "" : "",
-    "",
-    'For catalog-attached mode, recommended_products values should be strings like "Cetaphil - Gentle Skin Cleanser" or null. For non-catalog mode, keep recommended_products as null.',
+    "Product catalog attachment: none. Product suggestions must remain null in the JSON.",
     "",
     "Return JSON in this exact structure:",
     promptDraftPlaceholder

@@ -26,6 +26,10 @@ type ProductRowFormItem = {
   brand: string;
   company: string;
   productName: string;
+  protocolCondition: string;
+  sourceProductId: number | null;
+  twinProducts: ProductCatalogDto["twinProducts"] | null;
+  protocolNote: string;
 };
 
 type DoctorReviewFormValues = {
@@ -69,7 +73,9 @@ const productSlotOptions: Array<{ value: ProductSlotDto | null; label: string }>
   { value: "cleanser", label: "Cleanser / Facewash" },
   { value: "sunscreen", label: "Sunscreen" },
   { value: "moisturizer", label: "Moisturizer" },
-  { value: "repair_serum", label: "Repair / Serum" },
+  { value: "am_serum", label: "AM Serum" },
+  { value: "pm_repair", label: "PM Serum / Cream / Repair" },
+  { value: "repair_serum", label: "Repair / Serum (legacy)" },
   { value: null, label: "Custom / no heading" }
 ];
 
@@ -77,7 +83,8 @@ const canonicalProductFields = [
   { slot: "cleanser", title: "Cleanser / Facewash" },
   { slot: "sunscreen", title: "Sunscreen" },
   { slot: "moisturizer", title: "Moisturizer" },
-  { slot: "repair_serum", title: "Repair / Serum" }
+  { slot: "am_serum", title: "AM Serum" },
+  { slot: "pm_repair", title: "PM Serum / Cream / Repair" }
 ] as const satisfies ReadonlyArray<{ slot: ProductSlotDto; title: string }>;
 
 function createRowId() {
@@ -96,7 +103,11 @@ function createEmptyProductRow(slot: ProductSlotDto | null = null, title = ""): 
     productCatalogId: null,
     brand: "",
     company: "",
-    productName: ""
+    productName: "",
+    protocolCondition: "",
+    sourceProductId: null,
+    twinProducts: null,
+    protocolNote: ""
   };
 }
 
@@ -110,7 +121,11 @@ function toProductRowFormItems(report: ReportDetailDto): ProductRowFormItem[] {
         productCatalogId: null,
         brand: "",
         company: "",
-        productName: ""
+        productName: "",
+        protocolCondition: null,
+        sourceProductId: null,
+        twinProducts: null,
+        protocolNote: null
       } satisfies DoctorProductRowDto));
 
   return sourceRows.map((row) => ({
@@ -120,7 +135,11 @@ function toProductRowFormItems(report: ReportDetailDto): ProductRowFormItem[] {
     productCatalogId: row.productCatalogId ?? null,
     brand: row.brand ?? "",
     company: row.company ?? row.brand ?? "",
-    productName: row.productName ?? ""
+    productName: row.productName ?? "",
+    protocolCondition: row.protocolCondition ?? "",
+    sourceProductId: row.sourceProductId ?? null,
+    twinProducts: row.twinProducts ?? null,
+    protocolNote: row.protocolNote ?? ""
   }));
 }
 
@@ -149,6 +168,10 @@ function normalizeText(value: string) {
 }
 
 function slotTitle(slot: ProductSlotDto) {
+  if (slot === "repair_serum") {
+    return "Repair / Serum";
+  }
+
   return canonicalProductFields.find((field) => field.slot === slot)?.title ?? "Recommended Product";
 }
 
@@ -194,6 +217,14 @@ function isRelevantToSlot(product: ProductCatalogDto, slot: ProductSlotDto | nul
 
   if (slot === "moisturizer") {
     return /moisturizer|cream|lotion|gel/.test(pool) && !/sunscreen|spf|cleanser|face wash|serum/.test(pool);
+  }
+
+  if (slot === "am_serum") {
+    return /serum|morning|am|active/.test(pool) && !/sunscreen|spf|cleanser|face wash/.test(pool);
+  }
+
+  if (slot === "pm_repair") {
+    return /serum|cream|repair|night|pm|active|retinol|adapalene|azelaic/.test(pool) && !/sunscreen|spf|cleanser|face wash/.test(pool);
   }
 
   return /serum|treatment|repair|cream/.test(pool) && !/sunscreen|spf|cleanser|face wash/.test(pool);
@@ -533,6 +564,10 @@ export function DoctorReviewForm({ report, productCatalog }: { report: ReportDet
     form.setValue(`productRows.${index}.brand`, product.brandName, { shouldDirty: true });
     form.setValue(`productRows.${index}.company`, product.brandName, { shouldDirty: true });
     form.setValue(`productRows.${index}.productName`, product.productName, { shouldDirty: true });
+    form.setValue(`productRows.${index}.protocolCondition`, product.protocolCondition ?? product.claimedSkinConcerns[0] ?? "", { shouldDirty: true });
+    form.setValue(`productRows.${index}.sourceProductId`, product.sourceRowNumber ?? null, { shouldDirty: true });
+    form.setValue(`productRows.${index}.twinProducts`, product.twinProducts ?? null, { shouldDirty: true });
+    form.setValue(`productRows.${index}.protocolNote`, "", { shouldDirty: true });
   }
 
   function clearProductRow(index: number) {
@@ -540,6 +575,8 @@ export function DoctorReviewForm({ report, productCatalog }: { report: ReportDet
     form.setValue(`productRows.${index}.brand`, "", { shouldDirty: true });
     form.setValue(`productRows.${index}.company`, "", { shouldDirty: true });
     form.setValue(`productRows.${index}.productName`, "", { shouldDirty: true });
+    form.setValue(`productRows.${index}.sourceProductId`, null, { shouldDirty: true });
+    form.setValue(`productRows.${index}.twinProducts`, null, { shouldDirty: true });
   }
 
   function removeRowsForSlot(slot: ProductSlotDto) {
@@ -583,9 +620,13 @@ export function DoctorReviewForm({ report, productCatalog }: { report: ReportDet
         productCatalogId: row.productCatalogId ?? null,
         brand: normalizeText(row.brand),
         company: normalizeText(row.company) ?? normalizeText(row.brand),
-        productName: normalizeText(row.productName)
+        productName: normalizeText(row.productName),
+        protocolCondition: normalizeText(row.protocolCondition),
+        sourceProductId: row.sourceProductId ?? null,
+        twinProducts: row.twinProducts ?? null,
+        protocolNote: normalizeText(row.protocolNote)
       }))
-      .filter((row) => row.title || row.slot || row.productCatalogId || row.brand || row.company || row.productName);
+      .filter((row) => row.title || row.slot || row.productCatalogId || row.brand || row.company || row.productName || row.protocolCondition || row.protocolNote);
 
     const firstRowForSlot = (slot: ProductSlotDto) => normalizedRows.find((row) => row.slot === slot) ?? null;
 
@@ -758,6 +799,27 @@ export function DoctorReviewForm({ report, productCatalog }: { report: ReportDet
             <Button
               variant="secondary"
               onClick={() =>
+                runAction("regenerate-products", async () => {
+                  await saveReview();
+                  const response = await fetch(`/api/reports/${report.id}/protocol-products`, {
+                    method: "POST"
+                  });
+
+                  if (!response.ok) {
+                    const body = (await response.json().catch(() => ({}))) as { error?: string };
+                    throw new Error(body.error ?? "Could not regenerate products from protocol");
+                  }
+
+                  setStatusMessage("Products regenerated from Dr Monika protocol using the current skin type and primary concerns.");
+                })
+              }
+              disabled={busyAction !== null}
+            >
+              {busyAction === "regenerate-products" ? "Regenerating..." : "Regenerate protocol products"}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() =>
                 runAction("approve", async () => {
                   await saveReview();
                   const response = await fetch(`/api/reports/${report.id}/approve`, {
@@ -912,7 +974,7 @@ export function DoctorReviewForm({ report, productCatalog }: { report: ReportDet
             <div>
               <h3 className="text-lg font-semibold text-slate-900">Recommended products</h3>
               <p className="text-sm text-slate-600">
-                The matched products stay as defaults, but the doctor can edit headings, search the full product list, add rows, or remove rows.
+                Defaults now come from the Dr Monika skin protocol sheet. Edit skin type or primary concerns above, save, then regenerate if the protocol needs to be recalculated.
               </p>
             </div>
             <Button type="button" variant="secondary" onClick={() => setIsEditingProducts((value) => !value)}>
@@ -966,7 +1028,7 @@ export function DoctorReviewForm({ report, productCatalog }: { report: ReportDet
           <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4">
             <p className="text-sm font-semibold text-slate-900">Current report rows</p>
             <div className="mt-3 space-y-2">
-              {watchedProductRows.filter((row) => row.title || row.brand || row.productName || row.productCatalogId).map((row) => {
+              {watchedProductRows.filter((row) => row.title || row.brand || row.productName || row.productCatalogId || row.protocolCondition || row.protocolNote).map((row) => {
                 const selectedCatalogProduct = findCatalogProduct(productCatalog, row);
 
                 return (
@@ -975,6 +1037,8 @@ export function DoctorReviewForm({ report, productCatalog }: { report: ReportDet
                     {": "}
                     <span>{renderRowProductLabel(row) || "No product selected"}</span>
                     {selectedCatalogProduct?.qty ? <span className="text-slate-500"> • {selectedCatalogProduct.qty}</span> : null}
+                    {row.protocolCondition ? <div className="mt-1 text-xs text-slate-500">Protocol condition: {row.protocolCondition}</div> : null}
+                    {row.protocolNote ? <div className="mt-1 text-xs font-medium text-amber-700">{row.protocolNote}</div> : null}
                   </div>
                 );
               })}
@@ -1082,9 +1146,10 @@ export function DoctorReviewForm({ report, productCatalog }: { report: ReportDet
                               {selectedCatalogProduct.productType ? ` • ${selectedCatalogProduct.productType}` : ""}
                               {selectedCatalogProduct.qty ? ` • ${selectedCatalogProduct.qty}` : ""}
                               {selectedCatalogProduct.mrp !== null ? ` • MRP ${selectedCatalogProduct.mrp}` : ""}
+                              {currentRow.protocolCondition ? ` • Protocol: ${currentRow.protocolCondition}` : ""}
                             </>
                           ) : (
-                            "No catalog product selected for this row yet."
+                            currentRow.protocolNote || "No catalog product selected for this row yet."
                           )}
                         </div>
                       </div>

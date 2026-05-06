@@ -36,6 +36,8 @@ export type RankedProductMatch = {
   product: ProductCandidate;
 };
 
+type CatalogMatchSlot = "cleanser" | "sunscreen" | "moisturizer" | "repair_serum";
+
 type MatchContext = {
   patientSkinType: string;
   quizSummaryJson?: unknown;
@@ -43,14 +45,14 @@ type MatchContext = {
   catalog: ProductCandidate[];
 };
 
-const slotKeywords: Record<ProductSlotDto, string[]> = {
+const slotKeywords: Record<CatalogMatchSlot, string[]> = {
   cleanser: ["cleanser", "face wash", "facewash", "face cleanser", "gel cleanser", "foaming cleanser"],
   sunscreen: ["sunscreen", "spf", "sun screen", "sunblock"],
   moisturizer: ["moisturizer", "cream", "lotion", "gel moisturizer", "barrier cream"],
   repair_serum: ["serum", "repair", "treatment", "active", "corrector", "spot cream", "gel cream"]
 };
 
-const slotExclusionKeywords: Record<ProductSlotDto, string[]> = {
+const slotExclusionKeywords: Record<CatalogMatchSlot, string[]> = {
   cleanser: ["serum", "sunscreen", "spf", "moisturizer", "lotion", "lip", "body", "balm", "mask"],
   sunscreen: ["serum", "cleanser", "face wash", "moisturizer", "lip balm", "body lotion"],
   moisturizer: ["serum", "cleanser", "face wash", "sunscreen", "spf", "lip", "body"],
@@ -80,7 +82,7 @@ function includesToken(haystack: string[], needle: string) {
   return haystack.some((item) => item.includes(lowerNeedle) || lowerNeedle.includes(item));
 }
 
-function slotMatchesProduct(slot: ProductSlotDto, product: ProductCandidate) {
+function slotMatchesProduct(slot: CatalogMatchSlot, product: ProductCandidate) {
   const haystack = tokenize([
     product.category ?? "",
     product.productType ?? "",
@@ -106,11 +108,11 @@ function isFaceProduct(product: ProductCandidate) {
   return category.length === 0 || category.includes("face");
 }
 
-function hasExcludedSlotKeyword(slot: ProductSlotDto, pool: string[]) {
+function hasExcludedSlotKeyword(slot: CatalogMatchSlot, pool: string[]) {
   return slotExclusionKeywords[slot].some((keyword) => includesToken(pool, keyword));
 }
 
-function isEligibleForSlot(slot: ProductSlotDto, product: ProductCandidate) {
+function isEligibleForSlot(slot: CatalogMatchSlot, product: ProductCandidate) {
   const productTextPool = getProductTextPool(product);
   const productType = (product.productType ?? "").toLowerCase();
   const category = (product.category ?? "").toLowerCase();
@@ -231,7 +233,7 @@ export function rankProductsForDraft({ patientSkinType, quizSummaryJson, draft, 
     psoriasis: detectedSignals.psoriasis || quizInsights.flags.psoriasis
   };
 
-  return (Object.keys(slotKeywords) as ProductSlotDto[]).flatMap((slot) => {
+  return (Object.keys(slotKeywords) as CatalogMatchSlot[]).flatMap((slot) => {
     const desiredSlot = draft.ingredient_plan[slot];
     const desiredHeroIngredients = tokenize(desiredSlot.hero_ingredients);
     const desiredSupportingIngredients = tokenize(desiredSlot.supporting_ingredients);
@@ -414,7 +416,7 @@ function buildRecommendationCandidates(recommendation: RecommendedProduct) {
 function findCatalogProductFromRecommendation(
   recommendation: RecommendedProduct,
   catalog: ProductCandidate[],
-  slot: ProductSlotDto
+  slot: CatalogMatchSlot
 ) {
   const lookup = buildRecommendationCandidates(recommendation);
   const normalizedBrand = normalizeLookupText(lookup.preferredBrand);
@@ -503,9 +505,10 @@ export function resolveAiRecommendedProducts(
         return [];
       }
 
-      const product = findCatalogProductFromRecommendation(recommendation, catalog, slot);
+      const catalogSlot = slot as CatalogMatchSlot;
+      const product = findCatalogProductFromRecommendation(recommendation, catalog, catalogSlot);
 
-      if (!product || !isEligibleForSlot(slot, product)) {
+      if (!product || !isEligibleForSlot(catalogSlot, product)) {
         return [];
       }
 

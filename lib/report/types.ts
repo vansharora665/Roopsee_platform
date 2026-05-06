@@ -20,7 +20,20 @@ export type DoctorReviewInputDto = DoctorReviewUpdateInput;
 export type ReportStatusDto = ReportStatusValue;
 export type IntakeSourceDto = IntakeSourceValue;
 export type PromptInputModeDto = PromptInputModeValue;
-export type ProductSlotDto = "cleanser" | "sunscreen" | "moisturizer" | "repair_serum";
+export type ProductSlotDto =
+  | "cleanser"
+  | "sunscreen"
+  | "moisturizer"
+  | "repair_serum"
+  | "am_serum"
+  | "pm_repair";
+
+export type ProtocolTwinProductsDto = {
+  bench_twin: string[];
+  international_twin: string[];
+  premium_twin: string[];
+  herbal_twin: string[];
+};
 
 export type RoutineItem = {
   step: string;
@@ -78,6 +91,8 @@ export type ProductCatalogDto = {
   textureFinish: string | null;
   overallSuitabilityScore: number | null;
   productUrl: string | null;
+  protocolCondition?: string | null;
+  twinProducts?: ProtocolTwinProductsDto | null;
 };
 
 export type DoctorProductRowDto = {
@@ -88,6 +103,10 @@ export type DoctorProductRowDto = {
   brand: string | null;
   company: string | null;
   productName: string | null;
+  protocolCondition?: string | null;
+  sourceProductId?: number | null;
+  twinProducts?: ProtocolTwinProductsDto | null;
+  protocolNote?: string | null;
 };
 
 export type ProductMatchDto = {

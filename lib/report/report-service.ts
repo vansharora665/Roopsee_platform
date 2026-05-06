@@ -10,11 +10,16 @@ import { DEFAULT_USAGE_AMOUNTS } from "@/lib/report/default-guidance";
 import { deriveQuizInsights } from "@/lib/quiz/summary";
 import { getSkinScoreLabel, normalizeSkinScore } from "@/lib/report/score";
 import {
-  formatProductCatalogForPrompt,
   rankProductsForDraft,
   resolveAiRecommendedProducts
 } from "@/lib/catalog/matcher";
 import type { RankedProductMatch } from "@/lib/catalog/matcher";
+import {
+  buildProtocolDoctorNotes,
+  listProtocolProductCatalog,
+  recommendProtocolProducts,
+  resolveProtocolProductFromRow
+} from "@/lib/protocol/product-protocol";
 import { buildManualPrompt } from "@/lib/report/manual-prompt-builder";
 import { reportInclude, serializeReport, toReportListItem } from "@/lib/report/mappers";
 import { getGeneratedReportsDir, getUploadsReportsDir } from "@/lib/storage/files";
@@ -277,7 +282,8 @@ const defaultProductRowConfig = [
   { slot: "cleanser", title: "Cleanser / Facewash" },
   { slot: "sunscreen", title: "Sunscreen" },
   { slot: "moisturizer", title: "Moisturizer" },
-  { slot: "repair_serum", title: "Repair / Serum" }
+  { slot: "am_serum", title: "AM Serum" },
+  { slot: "pm_repair", title: "PM Serum / Cream / Repair" }
 ] as const satisfies ReadonlyArray<{ slot: ProductSlotDto; title: string }>;
 
 type LegacyDoctorProductFields = Pick<
@@ -369,6 +375,14 @@ function getProductTypeFallback(slot: ProductSlotDto | null, title?: string | nu
     return "Moisturizer";
   }
 
+  if (slot === "am_serum") {
+    return "AM Serum";
+  }
+
+  if (slot === "pm_repair") {
+    return "PM Serum / Cream / Repair";
+  }
+
   if (slot === "repair_serum") {
     return normalizedTitle.includes("cream") ? "Active Cream" : "Serum";
   }
@@ -452,6 +466,10 @@ function normalizeDoctorProductRows(
     brand?: string | null;
     company?: string | null;
     productName?: string | null;
+    protocolCondition?: string | null;
+    sourceProductId?: number | null;
+    twinProducts?: DoctorProductRowDto["twinProducts"];
+    protocolNote?: string | null;
   }>
 ) {
   return rows
@@ -462,6 +480,8 @@ function normalizeDoctorProductRows(
       const company = normalizeText(row.company) ?? brand;
       const productName = normalizeText(row.productName);
       const productCatalogId = normalizeText(row.productCatalogId);
+      const protocolCondition = normalizeText(row.protocolCondition);
+      const protocolNote = normalizeText(row.protocolNote);
 
       return {
         id: normalizeText(row.id) ?? `product-row-${index + 1}`,
@@ -470,10 +490,14 @@ function normalizeDoctorProductRows(
         productCatalogId,
         brand,
         company,
-        productName
+        productName,
+        protocolCondition,
+        sourceProductId: typeof row.sourceProductId === "number" ? row.sourceProductId : null,
+        twinProducts: row.twinProducts ?? null,
+        protocolNote
       } satisfies DoctorProductRowDto;
     })
-    .filter((row) => row.title || row.slot || row.productCatalogId || row.brand || row.company || row.productName);
+    .filter((row) => row.title || row.slot || row.productCatalogId || row.brand || row.company || row.productName || row.protocolCondition || row.protocolNote);
 }
 
 function buildLegacyDoctorFieldsFromRows(rows: DoctorProductRowDto[]): LegacyDoctorProductFields {
@@ -481,7 +505,7 @@ function buildLegacyDoctorFieldsFromRows(rows: DoctorProductRowDto[]): LegacyDoc
   const cleanser = firstRowForSlot("cleanser");
   const sunscreen = firstRowForSlot("sunscreen");
   const moisturizer = firstRowForSlot("moisturizer");
-  const repairSerum = firstRowForSlot("repair_serum");
+  const repairSerum = firstRowForSlot("pm_repair") ?? firstRowForSlot("repair_serum") ?? firstRowForSlot("am_serum");
 
   return {
     cleanserBrand: cleanser?.brand ?? null,
@@ -503,6 +527,13 @@ async function buildApprovedProductsPayload(report: ReportDetailDto) {
   const rows = normalizeDoctorProductRows(report.doctorReview.productRows);
   const catalogProducts = rows.length > 0
     ? await prisma.productCatalog.findMany()
+    : [];
+  const protocolProducts = rows.length > 0
+    ? await Promise.all(rows.map((row) => resolveProtocolProductFromRow({
+        productCatalogId: row.productCatalogId,
+        brand: row.brand ?? row.company,
+        productName: row.productName
+      })))
     : [];
   const supabaseProducts = rows.length > 0
     ? await listSupabaseProductMetadata()
@@ -550,8 +581,9 @@ async function buildApprovedProductsPayload(report: ReportDetailDto) {
     );
   }
 
-  return rows.flatMap((row) => {
+  return rows.flatMap((row, index) => {
     const catalogProduct = findCatalogProductForRow(row);
+    const protocolProduct = protocolProducts[index] ?? null;
     const brandName = catalogProduct?.brandName ?? row.brand ?? row.company ?? "";
     const productName = catalogProduct?.productName ?? row.productName ?? "";
 
@@ -569,6 +601,7 @@ async function buildApprovedProductsPayload(report: ReportDetailDto) {
     const normalizedProductName = normalizeComparableText(productName);
     const supabaseProduct = (
       (typeof catalogProduct?.sourceRowNumber === "number" ? supabaseProductById.get(catalogProduct.sourceRowNumber) : null) ??
+      (typeof protocolProduct?.sourceRowNumber === "number" ? supabaseProductById.get(protocolProduct.sourceRowNumber) : null) ??
       supabaseProducts.find((product) => {
         const productBrand = normalizeComparableText(product.brand_name ?? null);
         const foundProductName = normalizeComparableText(product.product_name ?? null);
@@ -579,15 +612,17 @@ async function buildApprovedProductsPayload(report: ReportDetailDto) {
 
     return [
       {
-        id: catalogProduct?.sourceRowNumber ?? null,
-        mrp: numberFromNullableString(catalogProduct?.mrp ?? null),
-        qty: catalogProduct?.qty ?? null,
-        image_url: supabaseProduct?.image_url ?? null,
+        id: catalogProduct?.sourceRowNumber ?? protocolProduct?.sourceRowNumber ?? row.sourceProductId ?? null,
+        mrp: numberFromNullableString(catalogProduct?.mrp ?? null) ?? protocolProduct?.mrp ?? null,
+        qty: catalogProduct?.qty ?? protocolProduct?.qty ?? null,
+        image_url: supabaseProduct?.image_url ?? protocolProduct?.imageUrl ?? null,
         brand_name: brandName,
         product_name: productName,
-        product_type: catalogProduct?.productType ?? getProductTypeFallback(row.slot, row.title),
+        product_type: catalogProduct?.productType ?? protocolProduct?.productType ?? getProductTypeFallback(row.slot, row.title),
         claimed_skin_type: claimedSkinType || report.analysisOutput.skinType,
-        claimed_skin_concerns: claimedSkinConcerns || fallbackConcerns
+        claimed_skin_concerns: claimedSkinConcerns || row.protocolCondition || fallbackConcerns,
+        protocol_condition: row.protocolCondition ?? protocolProduct?.condition ?? null,
+        twin_products: row.twinProducts ?? protocolProduct?.twins ?? null
       }
     ];
   });
@@ -750,11 +785,6 @@ async function resolveReportInput(input: CreateReportInputDto) {
     }
   };
 
-  const catalogForPrompt = input.includeProductCatalogInPrompt
-    ? await prisma.productCatalog.findMany({
-        orderBy: [{ category: "asc" }, { productType: "asc" }, { brandName: "asc" }, { productName: "asc" }]
-      })
-    : [];
   const promptText =
     input.promptText?.trim() ||
     buildManualPrompt({
@@ -768,9 +798,7 @@ async function resolveReportInput(input: CreateReportInputDto) {
         image3Url: imageUrls[2]
       },
       promptInputMode: resolvedInput.promptInputMode,
-      productCatalogText: input.includeProductCatalogInPrompt
-        ? formatProductCatalogForPrompt(catalogForPrompt)
-        : null
+      productCatalogText: null
     });
 
   return {
@@ -825,19 +853,26 @@ export async function createReport(input: CreateReportInputDto): Promise<ReportD
   const validatedInput = createReportRequestSchema.parse(input);
   const resolved = await resolveReportInput(validatedInput);
   const draftResult = await buildDraftAndSource(resolved.resolvedInput, resolved.promptText);
-  const catalog = await prisma.productCatalog.findMany();
-  const fallbackProductMatches = rankProductsForDraft({
-    patientSkinType: draftResult.draft.analysis.overall_skin_profile.skin_type,
-    quizSummaryJson: resolved.resolvedInput.assets.quizSummaryJson,
-    draft: draftResult.draft,
-    catalog
-  });
-  const aiRecommendedMatches = resolved.resolvedInput.includeProductCatalogInPrompt
-    ? resolveAiRecommendedProducts(draftResult.draft.recommended_products, catalog)
-    : [];
-  const productMatches = mergePreferredProductMatches(aiRecommendedMatches, fallbackProductMatches);
-  const defaultProductRows = buildDefaultDoctorProductRows(productMatches);
+  const protocolRecommendation = await recommendProtocolProducts({
+    profile: resolved.syncedProfile,
+    quizJson: resolved.resolvedInput.assets.quizSummaryJson,
+    analysisSkinType: draftResult.draft.analysis.overall_skin_profile.skin_type,
+    primaryConcerns: draftResult.draft.analysis.key_skin_concerns.primary,
+    secondaryConcerns: draftResult.draft.analysis.key_skin_concerns.secondary
+  }).catch((error: unknown) => ({
+    rule: null,
+    rows: [],
+    toners: [],
+    oralSupplements: [],
+    lifestyleChanges: [],
+    expectedTimeline: null,
+    issues: [error instanceof Error ? error.message : "Product protocol could not be generated."],
+    resolvedSkinType: draftResult.draft.analysis.overall_skin_profile.skin_type,
+    resolvedConcern: draftResult.draft.analysis.key_skin_concerns.primary[0] ?? "Not resolved"
+  }));
+  const defaultProductRows = normalizeDoctorProductRows(protocolRecommendation.rows);
   const legacyDoctorProductFields = buildLegacyDoctorFieldsFromRows(defaultProductRows);
+  const protocolDoctorNotes = buildProtocolDoctorNotes(protocolRecommendation);
 
   const record = await prisma.report.create({
     data: {
@@ -903,7 +938,13 @@ export async function createReport(input: CreateReportInputDto): Promise<ReportD
             provider: draftResult.provider,
             intakeSource: resolved.resolvedInput.intakeSource,
             promptInputMode: resolved.resolvedInput.promptInputMode,
-            includeProductCatalogInPrompt: resolved.resolvedInput.includeProductCatalogInPrompt,
+            productProtocol: {
+              source: "Dr Monika Google Sheet",
+              resolvedSkinType: protocolRecommendation.resolvedSkinType,
+              resolvedConcern: protocolRecommendation.resolvedConcern,
+              issues: protocolRecommendation.issues
+            },
+            includeProductCatalogInPrompt: false,
             syncedProfileId: resolved.syncedProfile?.id ?? null
           },
           responseRawText: draftResult.rawResponseText,
@@ -916,10 +957,10 @@ export async function createReport(input: CreateReportInputDto): Promise<ReportD
           productRows: defaultProductRows as Prisma.InputJsonValue,
           morningRoutine: buildRoutineItems(draftResult.draft.routine_plan.morning),
           nightRoutine: buildRoutineItems(draftResult.draft.routine_plan.night),
-          doThis: [],
+          doThis: protocolRecommendation.lifestyleChanges,
           notThat: [],
           expertTips: [],
-          doctorNotes: null
+          doctorNotes: protocolDoctorNotes || null
         }
       },
       generatedFile: {
@@ -927,19 +968,6 @@ export async function createReport(input: CreateReportInputDto): Promise<ReportD
           pdfUrl: null,
           htmlSnapshotPath: null
         }
-      },
-      productMatches: {
-        create: productMatches.map((match) => ({
-          slot: match.slot,
-          rank: match.rank,
-          matchScore: match.matchScore,
-          reasonJson: match.reasonJson as Prisma.InputJsonValue,
-          product: {
-            connect: {
-              id: match.product.id
-            }
-          }
-        }))
       }
     },
     include: reportInclude
@@ -974,11 +1002,21 @@ function serializeProductCatalogRecord(product: Awaited<ReturnType<typeof prisma
 }
 
 export async function listProductCatalog(): Promise<ProductCatalogDto[]> {
-  const catalog = await prisma.productCatalog.findMany({
-    orderBy: [{ category: "asc" }, { productType: "asc" }, { brandName: "asc" }, { productName: "asc" }]
+  const [catalog, protocolCatalog] = await Promise.all([
+    prisma.productCatalog.findMany({
+      orderBy: [{ category: "asc" }, { productType: "asc" }, { brandName: "asc" }, { productName: "asc" }]
+    }),
+    listProtocolProductCatalog()
+  ]);
+
+  const localCatalog = catalog.map(serializeProductCatalogRecord);
+  const localKeys = new Set(localCatalog.map((product) => normalizeComparableText(`${product.brandName} ${product.productName}`)));
+  const dedupedProtocolCatalog = protocolCatalog.filter((product) => {
+    const key = normalizeComparableText(`${product.brandName} ${product.productName}`);
+    return key && !localKeys.has(key);
   });
 
-  return catalog.map(serializeProductCatalogRecord);
+  return [...localCatalog, ...dedupedProtocolCatalog];
 }
 
 export async function listReports(status?: ReportStatusDto): Promise<ReportListItemDto[]> {
@@ -1238,6 +1276,87 @@ export async function updateDoctorReview(
             }
           }
         : {})
+    },
+    include: reportInclude
+  });
+
+  return serializeReport(report);
+}
+
+function mergeProtocolNotes(existingNotes: string | null | undefined, nextProtocolNotes: string) {
+  const existingLines = (existingNotes ?? "")
+    .split(/\n+/g)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !/^(Toners \(generic\)|Oral supplements \(generic\)|Expected timeline|Protocol review notes):/i.test(line));
+  const nextLines = nextProtocolNotes
+    .split(/\n+/g)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  return [...existingLines, ...nextLines].join("\n") || null;
+}
+
+export async function regenerateProtocolProducts(reportId: string): Promise<ReportDetailDto> {
+  const existingReport = await prisma.report.findUnique({
+    where: {
+      id: reportId
+    },
+    include: reportInclude
+  });
+
+  if (!existingReport) {
+    throw new Error("Report not found");
+  }
+
+  if (!existingReport.analysisOutput || !existingReport.doctorReview) {
+    throw new Error("Report is missing analysis or doctor review data");
+  }
+
+  const serializedExistingReport = serializeReport(existingReport);
+  const recommendation = await recommendProtocolProducts({
+    profile: serializedExistingReport.syncedProfile,
+    quizJson: serializedExistingReport.assets.quizSummaryJson,
+    analysisSkinType: serializedExistingReport.analysisOutput.skinType,
+    primaryConcerns: serializedExistingReport.analysisOutput.primaryConcerns,
+    secondaryConcerns: serializedExistingReport.analysisOutput.secondaryConcerns
+  });
+  const normalizedProductRows = normalizeDoctorProductRows(recommendation.rows);
+  const legacyDoctorProductFields = buildLegacyDoctorFieldsFromRows(normalizedProductRows);
+  const protocolDoctorNotes = buildProtocolDoctorNotes(recommendation);
+
+  const report = await prisma.report.update({
+    where: {
+      id: reportId
+    },
+    data: {
+      doctorReview: {
+        update: {
+          ...legacyDoctorProductFields,
+          productRows: normalizedProductRows as Prisma.InputJsonValue,
+          doThis: Array.from(new Set([
+            ...serializedExistingReport.doctorReview.doThis,
+            ...recommendation.lifestyleChanges
+          ])) as Prisma.InputJsonValue,
+          doctorNotes: mergeProtocolNotes(serializedExistingReport.doctorReview.doctorNotes, protocolDoctorNotes)
+        }
+      },
+      promptSession: {
+        update: {
+          promptContext: {
+            ...(serializedExistingReport.promptSession?.promptContext && typeof serializedExistingReport.promptSession.promptContext === "object"
+              ? serializedExistingReport.promptSession.promptContext as Record<string, unknown>
+              : {}),
+            productProtocol: {
+              source: "Dr Monika Google Sheet",
+              resolvedSkinType: recommendation.resolvedSkinType,
+              resolvedConcern: recommendation.resolvedConcern,
+              issues: recommendation.issues,
+              regeneratedAt: new Date().toISOString()
+            }
+          } as Prisma.InputJsonValue
+        }
+      }
     },
     include: reportInclude
   });

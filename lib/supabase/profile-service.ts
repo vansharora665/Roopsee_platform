@@ -89,6 +89,8 @@ type ApprovedProductExport = {
   product_type: string | null;
   claimed_skin_type: string;
   claimed_skin_concerns: string;
+  protocol_condition?: string | null;
+  twin_products?: unknown;
 };
 
 function serializeSyncedProfile(record: {

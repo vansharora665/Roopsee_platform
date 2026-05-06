@@ -164,8 +164,8 @@ function buildInheritedProfileContext(profile: SyncedProfileDto | null) {
 
 function valuesForStatus(includeProductCatalogInPrompt: boolean) {
   return includeProductCatalogInPrompt
-    ? "Prompt generated with inherited master_user_quiz answers, gender, current front/left/right image URLs, and the imported product catalog for direct GPT product selection."
-    : "Prompt generated with inherited master_user_quiz answers, gender, and current front/left/right image URLs. Product selection will fall back to ingredient-based catalog matching.";
+    ? "Prompt generated with inherited master_user_quiz answers, gender, and current front/left/right image URLs. Exact products will still be selected by the Dr Monika protocol after JSON import."
+    : "Prompt generated with inherited master_user_quiz answers, gender, and current front/left/right image URLs. Exact products will be selected by the Dr Monika protocol after JSON import.";
 }
 
 async function uploadSelectedImages(values: FormValues) {
@@ -224,7 +224,7 @@ export function NewReportForm({ initialProfiles }: { initialProfiles: SyncedProf
     defaultValues: {
       intakeSource: "manual",
       promptInputMode: "scan_assisted",
-      includeProductCatalogInPrompt: true,
+      includeProductCatalogInPrompt: false,
       syncedProfileId: "",
       name: "",
       age: 25,
@@ -526,10 +526,9 @@ export function NewReportForm({ initialProfiles }: { initialProfiles: SyncedProf
               {...form.register("includeProductCatalogInPrompt")}
             />
             <span>
-              <span className="block font-semibold text-slate-900">Attach imported product catalog to prompt</span>
+              <span className="block font-semibold text-slate-900">Legacy product-catalog prompt mode</span>
               <span className="mt-1 block text-slate-600">
-                When enabled, the prompt includes the imported product list so GPT can return exact cleanser, sunscreen,
-                moisturizer, and repair serum selections. Turn this off to use the older ingredient-plan plus catalog-search fallback.
+                Kept only for old reports. New reports do not ask GPT for product brands; the Dr Monika protocol sheet selects exact products after the JSON draft is imported.
               </span>
             </span>
           </label>

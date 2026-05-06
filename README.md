@@ -8,9 +8,9 @@ Roopsee is a production-oriented MVP for dermatologist-style skin analysis repor
 2. The platform can sync those profiles into its own `SyncedProfile` table either by manual pull or by a webhook.
 3. A staff member opens `/reports/new`, selects a Supabase profile or enters data manually, and generates a fixed ChatGPT prompt on-platform.
 4. The operator pastes the ChatGPT JSON draft back into the platform.
-5. The backend validates the JSON with Zod, stores the draft, and runs the product matcher against the product catalog.
-6. The doctor reviews only doctor-owned fields, adjusts products/routines/tips, approves the case, and generates the final PDF.
-7. User delivery and Telegram are intentionally left for the next phase.
+5. The backend validates the JSON with Zod, stores the draft, and selects products from the `Dr Monika_Skin protocol` Google Sheet, not from GPT.
+6. The doctor reviews editable analysis fields, regenerates protocol products if skin type/concern changes, adjusts products/routines/tips, approves the case, and generates the final PDF.
+7. PDF delivery is stored for later handoff, and Telegram draft/approval notifications are sent when credentials are configured.
 
 ## What changed from the earlier MVP
 
@@ -18,7 +18,7 @@ Roopsee is a production-oriented MVP for dermatologist-style skin analysis repor
 - Added a Supabase sync layer with list, sync, and webhook ingestion routes.
 - Added a prompt generation route so the platform produces the exact copy-ready prompt.
 - Added a full draft JSON contract that includes analysis, ingredient plan, routine plan, product matching hints, and doctor handoff notes.
-- Added a product matching engine that picks the top catalog suggestions per slot before the doctor reviews the case.
+- Added a protocol product engine that maps skin type + concern to Dr Monika's sheet, picks exact products, stores twin-product metadata for Supabase, and keeps GPT out of product selection.
 - Updated the intake UI so it works as an operator workstation instead of a simple form.
 
 ## Key routes
@@ -41,6 +41,7 @@ API routes:
 - `GET /api/supabase/profiles/[id]`
 - `POST /api/supabase/webhook`
 - `PATCH /api/reports/[id]/doctor-review`
+- `POST /api/reports/[id]/protocol-products`
 - `POST /api/reports/[id]/status`
 - `POST /api/reports/[id]/approve`
 - `POST /api/reports/[id]/generate-pdf`
@@ -73,6 +74,9 @@ Required for Supabase integration:
 Optional product import helper:
 
 - `PRODUCT_CATALOG_WORKBOOK_PATH`
+- `PROTOCOL_GOOGLE_SHEET_ID` default `131WoOqnwGoQitp3vDoDTN8ppf9C3ieSqEsoYvEBebHM`
+- `PROTOCOL_GOOGLE_SHEET_XLSX_URL` optional direct XLSX export URL override
+- `PROTOCOL_SHEET_CACHE_MS` default `600000`
 
 Other useful values:
 
@@ -112,6 +116,7 @@ Use a provider that runs a long-lived Node container and supports a persistent d
        SUPABASE_PROFILES_UPDATED_AT_COLUMN=updated_at
        TELEGRAM_BOT_TOKEN=your_bot_token
        TELEGRAM_CHAT_ID=your_chat_id
+       PROTOCOL_GOOGLE_SHEET_ID=131WoOqnwGoQitp3vDoDTN8ppf9C3ieSqEsoYvEBebHM
        APP_URL=<your Railway public URL>
        FILE_STORAGE_ROOT=/data
        PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
@@ -124,7 +129,7 @@ Use a provider that runs a long-lived Node container and supports a persistent d
        npm run db:push
        npm run db:seed
 
-8. Import the real product catalog into the production database. The easiest way is to run this from your own machine while `DATABASE_URL` points to the production database:
+8. Optional: import the older local product catalog for manual search/backward compatibility. New report defaults come from the Google Sheet protocol automatically.
 
        npm run catalog:import -- "/absolute/path/to/Final Dr.Monika database.xlsx"
 
@@ -139,7 +144,7 @@ Right now this platform uses a placeholder internal user model, not real role-ba
 1. Install dependencies.
 2. Push the Prisma schema.
 3. Seed demo data.
-4. Import your real product workbook if needed.
+4. Import your older product workbook only if you want it available in manual search.
 5. Start the app.
 
 Commands:
@@ -151,7 +156,7 @@ Commands:
     npm run catalog:import -- "/absolute/path/to/Final Dr.Monika database.xlsx"
     npm run dev
 
-If you do not import the workbook immediately, the seed script still creates a small demo catalog so the matcher works.
+If you do not import the workbook immediately, the Google Sheet protocol still supplies the new default products as long as the sheet is accessible.
 
 ## Supabase setup
 

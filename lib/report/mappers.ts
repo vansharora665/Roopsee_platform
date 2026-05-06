@@ -120,8 +120,31 @@ function productRowsFromJson(value: Prisma.JsonValue | null | undefined): Doctor
     const brand = typeof item.brand === "string" ? item.brand : null;
     const company = typeof item.company === "string" ? item.company : null;
     const productName = typeof item.productName === "string" ? item.productName : null;
+    const protocolCondition = typeof item.protocolCondition === "string" ? item.protocolCondition : null;
+    const sourceProductId = typeof item.sourceProductId === "number" ? item.sourceProductId : null;
+    const protocolNote = typeof item.protocolNote === "string" ? item.protocolNote : null;
+    const twinProducts = isRecord(item.twinProducts)
+      ? {
+          bench_twin: stringArrayFromJson(item.twinProducts.bench_twin as Prisma.JsonValue),
+          international_twin: stringArrayFromJson(item.twinProducts.international_twin as Prisma.JsonValue),
+          premium_twin: stringArrayFromJson(item.twinProducts.premium_twin as Prisma.JsonValue),
+          herbal_twin: stringArrayFromJson(item.twinProducts.herbal_twin as Prisma.JsonValue)
+        }
+      : null;
 
-    return [{ id, title, slot: slot as DoctorProductRowDto["slot"], productCatalogId, brand, company, productName }];
+    return [{
+      id,
+      title,
+      slot: slot as DoctorProductRowDto["slot"],
+      productCatalogId,
+      brand,
+      company,
+      productName,
+      protocolCondition,
+      sourceProductId,
+      twinProducts,
+      protocolNote
+    }];
   });
 }
 

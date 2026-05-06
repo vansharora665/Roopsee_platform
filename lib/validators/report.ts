@@ -16,11 +16,23 @@ const optionalString = z.string().trim().optional().nullable();
 const doctorProductRowSchema = z.object({
   id: z.string().trim().min(1),
   title: z.string().trim().default(""),
-  slot: z.enum(["cleanser", "sunscreen", "moisturizer", "repair_serum"]).nullable().optional(),
+  slot: z.enum(["cleanser", "sunscreen", "moisturizer", "repair_serum", "am_serum", "pm_repair"]).nullable().optional(),
   productCatalogId: z.string().trim().optional().nullable(),
   brand: optionalString,
   company: optionalString,
-  productName: optionalString
+  productName: optionalString,
+  protocolCondition: optionalString,
+  sourceProductId: z.number().int().optional().nullable(),
+  twinProducts: z
+    .object({
+      bench_twin: z.array(requiredString).default([]),
+      international_twin: z.array(requiredString).default([]),
+      premium_twin: z.array(requiredString).default([]),
+      herbal_twin: z.array(requiredString).default([])
+    })
+    .optional()
+    .nullable(),
+  protocolNote: optionalString
 });
 
 const doctorAnalysisOverrideSchema = z.object({
