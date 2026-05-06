@@ -12,7 +12,7 @@ import type {
 const PUSH_BUCKET = "roopsee-system-data";
 const WEB_PUSH_SUBSCRIPTIONS_PATH = "notifications/web-push-subscriptions.json";
 const DEFAULT_OPEN_URL = "/home_2";
-const INVALID_STATUS_CODES = new Set([404, 410]);
+const INVALID_STATUS_CODES = new Set([400, 403, 404, 410]);
 
 type StoredWebPushSubscription = {
   user_id?: string | null;
@@ -36,6 +36,10 @@ type WebPushRecipientResult = {
   invalid_subscription_count: number;
   status: "sent" | "failed" | "skipped";
   reason: string | null;
+  errors?: Array<{
+    status_code: number | null;
+    message: string;
+  }>;
 };
 
 let vapidConfigured = false;
@@ -126,6 +130,7 @@ async function sendToSubscriptions({
     (item) => item.endpoint && item.keys?.auth && item.keys?.p256dh
   );
   const invalidEndpoints: string[] = [];
+  const errors: Array<{ status_code: number | null; message: string }> = [];
   let successCount = 0;
   let failureCount = 0;
 
@@ -153,6 +158,15 @@ async function sendToSubscriptions({
     } catch (error) {
       failureCount += 1;
       const statusCode = Number((error as { statusCode?: number }).statusCode || 0);
+      const errorBody = String(
+        (error as { body?: string; message?: string }).body ||
+          (error as { message?: string }).message ||
+          "Web push delivery failed"
+      );
+      errors.push({
+        status_code: statusCode || null,
+        message: errorBody.slice(0, 500)
+      });
       if (INVALID_STATUS_CODES.has(statusCode) && subscription.endpoint) {
         invalidEndpoints.push(subscription.endpoint);
       }
@@ -166,7 +180,8 @@ async function sendToSubscriptions({
   return {
     successCount,
     failureCount,
-    invalidEndpoints
+    invalidEndpoints,
+    errors
   };
 }
 
@@ -200,7 +215,8 @@ export async function sendWebCampaignToRecipients({
         failure_count: 0,
         invalid_subscription_count: 0,
         status: "skipped",
-        reason: "no_web_subscription"
+        reason: "no_web_subscription",
+        errors: []
       });
       continue;
     }
@@ -224,7 +240,13 @@ export async function sendWebCampaignToRecipients({
       failure_count: response.failureCount,
       invalid_subscription_count: response.invalidEndpoints.length,
       status: response.successCount > 0 ? "sent" : "failed",
-      reason: response.successCount > 0 ? null : "delivery_failed"
+      reason:
+        response.successCount > 0
+          ? null
+          : response.invalidEndpoints.length > 0
+            ? "invalid_or_stale_subscription"
+            : "delivery_failed",
+      errors: response.errors
     });
   }
 

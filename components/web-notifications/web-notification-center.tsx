@@ -177,7 +177,11 @@ export function WebNotificationCenter({
             ? `Sent now to ${payload.results.sent_count} browser${payload.results.sent_count === 1 ? "" : "s"}.`
             : payload?.results?.skipped_count > 0
               ? "No active browser subscription was found for the selected users."
-              : "The browser notification could not be delivered."
+              : payload?.results?.recipients?.some?.((recipient: { reason?: string }) => recipient.reason === "invalid_or_stale_subscription")
+                ? "The saved browser subscription was stale and has been cleared. Ask the user to reopen the website and allow notifications again."
+                : payload?.results?.recipients?.[0]?.errors?.[0]?.message
+                  ? `The browser notification failed: ${payload.results.recipients[0].errors[0].message}`
+                  : "The browser notification could not be delivered."
       );
       if (!sendAt) {
         setScheduleAt("");
